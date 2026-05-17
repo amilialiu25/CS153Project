@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Resume Copilot</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="sidebar">
+        <p class="eyebrow">Local AI Resume Copilot</p>
+        <h1>Build a resume from evidence, not memory.</h1>
+        <p class="summary">
+          Upload work samples, convert them into a personal wiki, then generate
+          or refresh a resume draft from that structured source.
+        </p>
+
+        <section class="pipeline" aria-label="Project pipeline">
+          <span>raw</span>
+          <span>wiki</span>
+          <span>resume</span>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <section class="panel upload-panel">
+          <div>
+            <p class="step">Step 1</p>
+            <h2>Upload raw work</h2>
+          </div>
+          <label class="dropzone">
+            <input id="fileInput" type="file" multiple />
+            <span>Choose files to add into raw/</span>
+          </label>
+          <ul id="rawList" class="file-list"></ul>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="step">Step 2</p>
+              <h2>Wiki preview</h2>
+            </div>
+            <button id="generateWikiButton">Generate wiki</button>
+          </div>
+          <div id="wikiPreview" class="preview"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="step">Step 3</p>
+              <h2>Resume preview</h2>
+            </div>
+            <button id="generateResumeButton">Generate resume</button>
+          </div>
+          <div id="resumePreview" class="preview"></div>
+        </section>
+      </section>
+    </main>
+
+    <script src="./renderer.js"></script>
+  </body>
+</html>
+
