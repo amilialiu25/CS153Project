@@ -11,12 +11,17 @@ the resume, and preview the result.
 ## Core Flow
 
 1. User opens the local app.
-2. User uploads or adds sample work into `raw/`.
-3. A raw-to-wiki agent reads the new material.
-4. The agent extracts facts, skills, projects, impact, and evidence.
-5. The agent updates the person's wiki in `wiki/`.
-6. The UI visualizes the updated wiki.
-7. Resume generation uses `wiki/` as the trusted source.
+2. User chooses a workflow mode:
+   - Build from scratch
+   - Improve an existing resume
+3. User uploads source material:
+   - Raw evidence into `raw/`
+   - Optional original resume into `ai-resume/original/`
+4. A resume-to-wiki or raw-to-wiki agent reads the available material.
+5. The agent extracts facts, skills, projects, impact, and evidence.
+6. The agent updates the person's wiki in `wiki/`.
+7. Resume generation uses `wiki/` as the trusted source and may also use the
+   original resume as a style/reference input.
 8. The UI previews the generated or updated resume.
 9. If new raw material is added, update the wiki first, then refresh resume drafts.
 
@@ -26,7 +31,43 @@ the resume, and preview the result.
 - `docs/`: Product and architecture notes for future agents.
 - `raw/`: Unprocessed source material from the user.
 - `wiki/`: Structured, cleaned, user-specific knowledge base.
+- `ai-resume/original/`: User-provided original resume files used for import,
+  polishing, comparison, or update workflows.
 - `ai-resume/`: Resume drafts, templates, and exports.
+
+## Workflow Modes
+
+### Mode A: Build From Scratch
+
+Use this when the user does not already have a resume or wants a fresh version.
+
+Expected path:
+
+- Upload raw evidence into `raw/`
+- Generate or update `wiki/`
+- Generate a resume draft from `wiki/`
+- Optionally select a default template or user-chosen template
+
+### Mode B: Improve Existing Resume
+
+Use this when the user already has a resume and wants polishing or updates.
+
+Expected path:
+
+- Upload the original resume into `ai-resume/original/`
+- Extract facts from the original resume into `wiki/`
+- If the user also uploads new raw evidence, merge that evidence into `wiki/`
+- Generate either:
+  - a polished rewrite using only the original resume and wiki, or
+  - an updated resume using the original resume, wiki, and new raw evidence
+
+Rules:
+
+- Uploading an original resume should never force a build-from-scratch flow.
+- Even without new raw evidence, the original resume should still be converted
+  into wiki facts so later updates have structured state.
+- Resume polishing may work without new raw evidence.
+- Resume updating should prefer fresh wiki facts when new evidence exists.
 
 ## UI Agent
 
@@ -38,7 +79,10 @@ without manually editing folders.
 ### Responsibilities
 
 - Let users upload files and save them into `raw/`.
+- Let users upload an original resume into `ai-resume/original/`.
+- Let users choose between build-from-scratch and improve-existing-resume modes.
 - Show the current raw file list.
+- Show the current original resume file, if one exists.
 - Show wiki pages from `wiki/`.
 - Trigger wiki generation or update.
 - Trigger resume generation or update.
@@ -51,6 +95,8 @@ without manually editing folders.
 - Do not make the UI invent resume content; generation should happen through
   the wiki and resume agents.
 - Make placeholder states obvious until real model-backed logic exists.
+- Put the resume preview ahead of wiki detail in the visual hierarchy.
+- Keep large wiki output collapsible so resume review stays primary.
 
 ## Raw-To-Wiki Agent
 
@@ -96,11 +142,36 @@ inventing unsupported facts.
 The resume generation agent will be added later. It should eventually:
 
 - Read from `wiki/`, not directly from `raw/`
+- Read from `ai-resume/original/` when the user is improving an existing resume
 - Ask the user about target role, company, and resume style
 - Generate resume drafts in `ai-resume/drafts/`
 - Keep templates in `ai-resume/templates/`
 - Put exported resumes in `ai-resume/exports/`
 - Update an existing resume when new wiki facts are added
+
+## Template Direction
+
+- Default to a conservative ATS-friendly template until user-specific templates
+  are supported.
+- Prefer single-column layout, simple headings, standard fonts, and no tables
+  or decorative text boxes in the default export path.
+- Treat templates as explicit assets in `ai-resume/templates/`, not hidden
+  prompt behavior.
+
+## Agent Handoff Rule
+
+Any agent making a structural product, workflow, folder, or architecture change
+must update `docs/agent-progress.md` in the same work session.
+
+Structural changes include:
+
+- adding or changing workflow modes
+- changing folder responsibilities
+- changing UI flow or user-visible steps
+- changing generation dependencies between raw, wiki, original resume, and drafts
+- changing template strategy or export assumptions
+
+Do not leave structural decisions only in code or chat history.
 
 ## Current Implementation Notes
 

@@ -10,7 +10,7 @@
     "package:mac": "electron-builder --mac"
   },
   "devDependencies": {
-    "electron": "^35.0.0",
+    "electron": "^35.7.5",
     "electron-builder": "^26.0.0"
   },
   "build": {
@@ -30,4 +30,3 @@
     }
   }
 }
-

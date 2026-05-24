@@ -24,10 +24,39 @@
       </aside>
 
       <section class="workspace">
-        <section class="panel upload-panel">
+        <section class="panel mode-panel">
+          <div class="panel-header mode-panel-header">
+            <div>
+              <p class="step">Step 1</p>
+              <h2>Choose your workflow and upload sources</h2>
+              <p id="modeSummary" class="panel-note">
+                Pick whether we are building a new resume or improving an existing one.
+              </p>
+            </div>
+          </div>
+          <div id="workflowModeGroup" class="mode-grid" role="radiogroup" aria-label="Workflow mode">
+            <label class="mode-card">
+              <input type="radio" name="workflowMode" value="build-from-scratch" checked />
+              <span class="mode-kicker">Mode A</span>
+              <strong>Build from scratch</strong>
+              <span>Upload raw evidence, generate wiki facts, then build a new resume draft.</span>
+            </label>
+            <label class="mode-card">
+              <input type="radio" name="workflowMode" value="improve-existing-resume" />
+              <span class="mode-kicker">Mode B</span>
+              <strong>Improve existing resume</strong>
+              <span>Upload your current resume first, then polish it or update it with new evidence.</span>
+            </label>
+          </div>
+        </section>
+
+        <section class="panel upload-panel intake-panel">
           <div>
-            <p class="step">Step 1</p>
+            <p class="step">Source A</p>
             <h2>Upload raw work</h2>
+            <p class="panel-note">
+              Add evidence files only. Project README and system notes stay hidden from the workflow.
+            </p>
           </div>
           <label class="dropzone">
             <input id="fileInput" type="file" multiple />
@@ -36,26 +65,53 @@
           <ul id="rawList" class="file-list"></ul>
         </section>
 
-        <section class="panel">
-          <div class="panel-header">
-            <div>
-              <p class="step">Step 2</p>
-              <h2>Wiki preview</h2>
-            </div>
-            <button id="generateWikiButton">Generate wiki</button>
+        <section class="panel upload-panel original-resume-panel">
+          <div>
+            <p class="step">Source B</p>
+            <h2>Upload original resume</h2>
+            <p id="originalResumeNote" class="panel-note">
+              Recommended for the improve-existing-resume flow. Prefer `.docx` when available, but text-based PDF is also fine.
+            </p>
           </div>
-          <div id="wikiPreview" class="preview"></div>
+          <label class="dropzone resume-dropzone">
+            <input id="originalResumeInput" type="file" multiple />
+            <span>Choose your current resume</span>
+          </label>
+          <ul id="originalResumeList" class="file-list"></ul>
         </section>
 
         <section class="panel">
           <div class="panel-header">
             <div>
+              <p class="step">Step 2</p>
+              <h2>Build wiki first</h2>
+              <p class="panel-note">
+                The agent needs this structured layer before it can reliably polish or generate the resume.
+              </p>
+            </div>
+            <button id="generateWikiButton">Generate wiki</button>
+          </div>
+          <div class="status-row">
+            <span id="wikiStatusBadge" class="status-badge">Wiki not generated yet</span>
+          </div>
+          <div id="wikiPreview" class="preview wiki-preview"></div>
+        </section>
+
+        <section class="panel resume-stage-panel">
+          <div class="panel-header">
+            <div>
               <p class="step">Step 3</p>
-              <h2>Resume preview</h2>
+              <h2>Generate final resume</h2>
+              <p class="panel-note">
+                Resume stays the primary output, but it should come after the wiki has been refreshed.
+              </p>
             </div>
             <button id="generateResumeButton">Generate resume</button>
           </div>
-          <div id="resumePreview" class="preview"></div>
+          <div class="status-row">
+            <span id="resumeStatusBadge" class="status-badge">Generate wiki first</span>
+          </div>
+          <div id="resumePreview" class="preview resume-preview"></div>
         </section>
       </section>
     </main>

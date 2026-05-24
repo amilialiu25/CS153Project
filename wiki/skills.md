@@ -1,14 +1,11 @@
 # Skills
 
-## Technical Skills
+Skills below are matched directly from raw text and should be reviewed by the user.
 
-Needs source material from `raw/`.
+## Detected Skills
 
-## Tools
+- No grounded skills identified yet from the current raw text files.
 
-Needs source material from `raw/`.
+## Evidence Sources
 
-## Soft Skills
-
-Needs source material from `raw/`.
-
+- No readable text sources yet.

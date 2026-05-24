@@ -1,6 +1,10 @@
 # Resume-Ready Bullets
 
-No resume bullets generated yet.
+These are conservative bullet candidates copied from raw evidence. They should be edited before final resume use.
 
-Each bullet should be backed by evidence from `raw/` and refined through `wiki/`.
+- No bullet-style evidence found yet in the current raw files.
 
+## Review Notes
+
+- Keep only claims that remain grounded in the source evidence.
+- Add metrics, scope, and outcomes only when the raw material supports them.

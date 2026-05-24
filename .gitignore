@@ -3,3 +3,6 @@ node_modules/
 dist/
 release/
 npm-debug.log*
+.resume-copilot-state.json
+dev.stdout.log
+dev.stderr.log
