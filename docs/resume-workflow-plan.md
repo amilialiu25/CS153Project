@@ -88,9 +88,25 @@ The initial default template should be:
 
 Current recommendation:
 
-- build one conservative default template first
+- use `ai-resume/templates/default-ats.docx` as the initial conservative default
+  DOCX template
+- keep `ai-resume/templates/default-ats.docx` as the Word formatting reference
+- keep the initial template aligned with the provided Word resume style:
+  centered name/contact line, section labels with horizontal rules, compact
+  single-column sections, and metric-forward bullets
 - do not block workflow on a large template library
 - add user-selectable templates after the update flow works
+
+Export policy:
+
+- generate DOCX as the source-of-truth formatted artifact first
+- when an original `.docx` resume exists, preserve that document as the export
+  baseline until a model-backed polish/update step can safely rewrite it
+- convert DOCX to PDF when LibreOffice/soffice or Microsoft Word automation is
+  available locally
+- do not generate Markdown resume drafts; Markdown remains limited to the wiki
+  knowledge base
+- fill DOCX placeholder templates before using any programmatic fallback builder
 
 Notes from current web research:
 
@@ -112,12 +128,16 @@ Sources:
 1. Add original resume upload support in the UI and filesystem.
 2. Add `ai-resume/original/` folder handling in the app state.
 3. Create a resume-import step that parses original resume content into wiki pages.
+   Initial `.docx` support writes imported facts to `wiki/original-resume.md`;
+   PDF support remains future work.
+   Wiki generation now also creates source summary pages, concept pages,
+   `wiki/index.md`, and `wiki/log.md`.
 4. Split resume actions into:
    - Polish existing resume
    - Update resume with new evidence
    - Build resume from scratch
-5. Add one explicit default template in `ai-resume/templates/`.
-6. Later add template selection and export variants.
+5. Expand DOCX template filling to user-selected templates.
+6. Later add richer template selection and export variants.
 
 ## Non-Goals For The First Pass
 

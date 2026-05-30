@@ -6,7 +6,7 @@ Minimal project scaffold for a local-first AI resume copilot with a Web UI.
 
 Users add sample work into `raw/`, and the project turns that raw material into
 a structured personal wiki in `wiki/`. The resume generation component then
-uses the wiki as its source of truth to create targeted resume drafts.
+uses the wiki as its source of truth to create targeted DOCX/PDF exports.
 
 When a user wants to update their resume, they can add new raw files that
 represent their latest work. The system updates the wiki first, then refreshes
@@ -14,12 +14,12 @@ the resume so the new version stays grounded in the most recent evidence.
 
 The intended product is a local desktop app: the user opens a packaged binary,
 uploads files through a Web UI, watches the personal wiki update, then previews
-the generated resume in the same interface.
+the generated resume export in the same interface.
 
 ## Flow
 
 ```text
-Web UI upload -> raw/ -> wiki/ -> ai-resume/ -> resume preview
+Web UI upload -> raw/ -> wiki/ -> ai-resume/templates/ -> ai-resume/exports/
 ```
 
 ## App Direction
@@ -33,8 +33,8 @@ The current Web UI is an MVP scaffold:
 - Upload files into `raw/`
 - Show uploaded raw files
 - Generate a placeholder wiki snapshot
-- Generate a placeholder resume draft
-- Preview wiki and resume markdown in the app
+- Generate a placeholder DOCX/PDF resume export
+- Preview wiki markdown and list exported resume files in the app
 
 ## Structure
 
@@ -42,7 +42,7 @@ The current Web UI is an MVP scaffold:
 - `docs/project-description.md`: product description for future agents
 - `raw/`: uploaded source evidence
 - `wiki/`: structured personal knowledge base
-- `ai-resume/`: resume drafts, templates, and exports
+- `ai-resume/`: resume templates and exports
 
 ## Current Status
 

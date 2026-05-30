@@ -4,9 +4,8 @@ This folder is reserved for the resume generation part of the project.
 
 Planned structure:
 
-- `drafts/`: generated resume drafts
-- `templates/`: resume templates
-- `exports/`: exported final resumes
+- `templates/`: DOCX resume templates
+- `exports/`: exported DOCX and PDF resumes
 
 Implementation can be added later.
 

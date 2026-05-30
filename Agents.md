@@ -1,5 +1,8 @@
 # AI Resume Copilot Agents
 
+See `CLAUDE.md` for the full LLM Wiki instructions, folder structure, and
+project overview. This file covers agent-specific workflow details.
+
 This project is a lightweight AI resume copilot inspired by the "LLM wiki" idea:
 raw user work samples are collected first, then transformed into a structured
 personal wiki, and later used to co-create resumes with the user.
@@ -22,8 +25,8 @@ the resume, and preview the result.
 6. The agent updates the person's wiki in `wiki/`.
 7. Resume generation uses `wiki/` as the trusted source and may also use the
    original resume as a style/reference input.
-8. The UI previews the generated or updated resume.
-9. If new raw material is added, update the wiki first, then refresh resume drafts.
+8. The UI lists generated or updated DOCX/PDF resume exports.
+9. If new raw material is added, update the wiki first, then refresh resume exports.
 
 ## Folder Roles
 
@@ -33,7 +36,7 @@ the resume, and preview the result.
 - `wiki/`: Structured, cleaned, user-specific knowledge base.
 - `ai-resume/original/`: User-provided original resume files used for import,
   polishing, comparison, or update workflows.
-- `ai-resume/`: Resume drafts, templates, and exports.
+- `ai-resume/`: Resume templates and exports.
 
 ## Workflow Modes
 
@@ -45,7 +48,7 @@ Expected path:
 
 - Upload raw evidence into `raw/`
 - Generate or update `wiki/`
-- Generate a resume draft from `wiki/`
+- Generate a DOCX/PDF resume export from `wiki/`
 - Optionally select a default template or user-chosen template
 
 ### Mode B: Improve Existing Resume
@@ -86,7 +89,7 @@ without manually editing folders.
 - Show wiki pages from `wiki/`.
 - Trigger wiki generation or update.
 - Trigger resume generation or update.
-- Show resume drafts from `ai-resume/drafts/`.
+- Show generated resume export files from `ai-resume/exports/`.
 
 ### Rules
 
@@ -95,15 +98,15 @@ without manually editing folders.
 - Do not make the UI invent resume content; generation should happen through
   the wiki and resume agents.
 - Make placeholder states obvious until real model-backed logic exists.
-- Put the resume preview ahead of wiki detail in the visual hierarchy.
+- Put resume export status ahead of wiki detail in the visual hierarchy.
 - Keep large wiki output collapsible so resume review stays primary.
 
 ## Raw-To-Wiki Agent
 
 ### Goal
 
-Turn messy user-provided work samples into a structured personal wiki without
-inventing unsupported facts.
+Turn messy user-provided work samples and uploaded original resumes into a
+structured LLM Wiki without inventing unsupported facts.
 
 ### Inputs
 
@@ -114,17 +117,48 @@ inventing unsupported facts.
 ### Outputs
 
 - Updated wiki pages in `wiki/`
+- `wiki/index.md` as the table of contents
+- `wiki/log.md` as the append-only operation log
 - Short list of questions when important details are missing
-- Change notes describing what was added or updated
+- Source summary pages named after source files
+- Concept pages for major resume ideas and entities
 
 ### Rules
 
 - Treat `raw/` as evidence, not final truth.
+- Treat `ai-resume/original/` as evidence for improve-existing-resume workflows.
 - Do not overwrite existing wiki facts unless the new raw material clearly
   updates or corrects them.
 - Keep uncertain claims marked as `Needs clarification`.
 - Preserve links or filenames back to the original raw source when possible.
 - Prefer concise, resume-useful facts: role, action, tools, outcome, impact.
+- Keep wiki page names lowercase with hyphens.
+- Link related pages with `[[wiki-links]]`.
+- Cite factual claims with `(source: filename.ext)`.
+- Always update `wiki/index.md` and append to `wiki/log.md` after generation.
+
+### Page Format
+
+Every generated wiki page should follow this structure:
+
+```markdown
+# Page Title
+
+**Summary**: One to two sentences describing this page.
+
+**Sources**:
+- source-file.ext
+
+**Last updated**: ISO timestamp.
+
+---
+
+Main content with citations and [[wiki-links]].
+
+## Related pages
+
+- [[related-page]]
+```
 
 ### Suggested Wiki Sections
 
@@ -144,7 +178,6 @@ The resume generation agent will be added later. It should eventually:
 - Read from `wiki/`, not directly from `raw/`
 - Read from `ai-resume/original/` when the user is improving an existing resume
 - Ask the user about target role, company, and resume style
-- Generate resume drafts in `ai-resume/drafts/`
 - Keep templates in `ai-resume/templates/`
 - Put exported resumes in `ai-resume/exports/`
 - Update an existing resume when new wiki facts are added
@@ -168,7 +201,7 @@ Structural changes include:
 - adding or changing workflow modes
 - changing folder responsibilities
 - changing UI flow or user-visible steps
-- changing generation dependencies between raw, wiki, original resume, and drafts
+- changing generation dependencies between raw, wiki, original resume, and exports
 - changing template strategy or export assumptions
 
 Do not leave structural decisions only in code or chat history.
@@ -177,7 +210,7 @@ Do not leave structural decisions only in code or chat history.
 
 - `app/main.js` contains placeholder Electron IPC handlers.
 - Upload already writes selected files into `raw/`.
-- Wiki generation currently writes `wiki/generated-snapshot.md`.
-- Resume generation currently writes `ai-resume/drafts/resume-draft.md`.
+- Wiki generation currently writes structured pages in `wiki/`.
+- Resume generation currently writes DOCX/PDF files in `ai-resume/exports/`.
 - Future agents should replace placeholder generation with model-backed logic
   while preserving the same folder-level workflow.

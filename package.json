@@ -3,30 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "Local-first AI resume copilot with raw upload, wiki generation, and resume preview.",
-  "main": "app/main.js",
+  "main": "app/server.js",
   "scripts": {
-    "dev": "electron .",
-    "package": "electron-builder",
-    "package:mac": "electron-builder --mac"
+    "dev": "node app/server.js"
   },
-  "devDependencies": {
-    "electron": "^35.7.5",
-    "electron-builder": "^26.0.0"
-  },
-  "build": {
-    "appId": "edu.cs153.ai-resume-copilot",
-    "productName": "AI Resume Copilot",
-    "files": [
-      "app/**/*",
-      "raw/**/*",
-      "wiki/**/*",
-      "ai-resume/**/*",
-      "README.md",
-      "Agents.md",
-      "docs/**/*"
-    ],
-    "directories": {
-      "output": "dist"
-    }
+  "dependencies": {
+    "docx": "^9.5.1",
+    "jszip": "^3.10.1"
   }
 }

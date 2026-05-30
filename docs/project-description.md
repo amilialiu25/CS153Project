@@ -19,8 +19,17 @@ the source of truth.
 4. The raw-to-wiki agent reads new raw files and updates `wiki/`.
 5. The UI shows a visual preview of the wiki.
 6. The user clicks generate or update resume.
-7. The resume agent reads from `wiki/` and writes drafts into `ai-resume/drafts/`.
-8. The UI shows a resume preview and eventually supports export.
+7. The resume agent reads from `wiki/` and writes formatted files into
+   `ai-resume/exports/`.
+8. The UI shows exported DOCX/PDF files.
+
+For improve-existing-resume workflows, uploaded `.docx` resumes in
+`ai-resume/original/` are parsed into `wiki/original-resume.md` during wiki
+generation before exports are refreshed.
+
+Wiki generation follows the LLM Wiki pattern: each source receives a source
+summary page, major resume concepts receive their own interlinked pages, and
+`wiki/index.md` plus `wiki/log.md` are updated on every generation.
 
 When the user has new work, they repeat the same loop: add new raw files,
 update the wiki, then refresh the resume. The resume should stay grounded in
@@ -43,13 +52,12 @@ and create clear places where the actual agents can be connected later.
 
 - Upload: choose files and save them into `raw/`.
 - Wiki: show generated wiki pages and update status.
-- Resume: generate or update a draft and preview it.
+- Resume: generate or update a DOCX/PDF export.
 
 ## Data Folders
 
 - `raw/`: uploaded source evidence from the user.
 - `wiki/`: structured personal knowledge base derived from raw evidence.
-- `ai-resume/drafts/`: generated resume drafts.
 - `ai-resume/templates/`: resume template files.
 - `ai-resume/exports/`: final exported resumes.
 
@@ -59,7 +67,7 @@ The raw-to-wiki agent should extract grounded facts, skills, project details,
 impact, and open questions. It should not invent unsupported claims.
 
 The resume agent should read from `wiki/`, ask for target-role context when
-needed, and create targeted resume drafts in `ai-resume/drafts/`.
+needed, and create targeted DOCX/PDF exports in `ai-resume/exports/`.
 
 The UI layer should orchestrate the workflow and visualize state. It should not
 be treated as the source of truth; the filesystem folders remain the durable
