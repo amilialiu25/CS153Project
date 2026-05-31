@@ -1721,6 +1721,7 @@ module.exports = {
   writeWikiPages,
   writeResumeDocx,
   fillDocxTemplate,
+  buildDocxTemplateValues,
   convertDocxToPdf,
   isStateUpToDate,
   getIsoNow,

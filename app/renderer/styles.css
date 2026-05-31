@@ -675,6 +675,129 @@ button, input { font: inherit; }
 
 .markdown-body .meta-block strong { color: var(--text); }
 
+/* ─── RESUME PREVIEW ─── */
+
+.resume-preview {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 8px 0;
+}
+
+.resume-header { text-align: center; margin-bottom: 16px; }
+
+.resume-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.resume-contact {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.resume-section { margin-bottom: 14px; }
+
+.resume-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  border-bottom: 1px solid var(--border-strong);
+  padding-bottom: 3px;
+  margin-bottom: 6px;
+}
+
+.resume-entry { margin-bottom: 10px; }
+
+.resume-entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.resume-org {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.resume-dates {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.resume-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.resume-bullets {
+  list-style: disc;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.resume-bullets li { margin-bottom: 3px; }
+
+.resume-skills {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+}
+
+/* Diff toggle */
+
+.content-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.diff-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.diff-toggle:hover { color: var(--text); background: var(--bg-hover); }
+.diff-toggle.active { color: #e0b050; border-color: rgba(224, 176, 80, 0.3); background: rgba(224, 176, 80, 0.08); }
+
+/* Diff highlights */
+
+.diff-changed {
+  position: relative;
+  border-left: 2px solid #e0b050;
+  padding-left: 8px;
+  margin-left: -10px;
+}
+
+.diff-old {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-decoration: line-through;
+  margin-bottom: 2px;
+  opacity: 0.6;
+}
+
 /* ─── RESPONSIVE ─── */
 
 @media (max-width: 900px) {

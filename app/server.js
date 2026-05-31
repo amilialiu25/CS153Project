@@ -7,6 +7,19 @@ const { detectClaude, generateWikiPages: agentGenerateWikiPages, generateResumeV
 
 const PORT = 3000;
 const rendererDir = path.join(__dirname, "renderer");
+const resumeValuesPath = path.join(core.exportDir, "resume-values.json");
+const resumeValuesPrevPath = path.join(core.exportDir, "resume-values-prev.json");
+
+async function readResumeValues(filePath) {
+  try { return JSON.parse(await fsPromises.readFile(filePath, "utf8")); }
+  catch { return null; }
+}
+
+async function saveResumeValues(values) {
+  const current = await readResumeValues(resumeValuesPath);
+  if (current) await fsPromises.writeFile(resumeValuesPrevPath, JSON.stringify(current, null, 2));
+  await fsPromises.writeFile(resumeValuesPath, JSON.stringify(values, null, 2));
+}
 
 const MIME_TYPES = {
   ".html": "text/html",
@@ -48,14 +61,16 @@ async function handleApi(req, res) {
   try {
     if (route === "/api/state" && method === "GET") {
       await core.ensureProjectDirs();
-      const [projectState, rawFiles, originalResumeFiles, templateFiles, exportFiles, wikiPages, agentStatus] = await Promise.all([
+      const [projectState, rawFiles, originalResumeFiles, templateFiles, exportFiles, wikiPages, agentStatus, resumeValues, prevResumeValues] = await Promise.all([
         core.readProjectState(),
         core.listRawFiles(),
         core.listOriginalResumeFiles(),
         core.listResumeTemplateFiles(),
         core.listExportFiles(),
         core.readMarkdownFiles(core.wikiDir),
-        detectClaude()
+        detectClaude(),
+        readResumeValues(resumeValuesPath),
+        readResumeValues(resumeValuesPrevPath)
       ]);
 
       return sendJson(res, {
@@ -70,7 +85,9 @@ async function handleApi(req, res) {
         originalResumeFiles,
         templateFiles,
         exportFiles,
-        wikiPages
+        wikiPages,
+        resumeValues,
+        prevResumeValues
       });
     }
 
@@ -168,20 +185,27 @@ async function handleApi(req, res) {
       const agentResult = await agentGenerateResumeValues(wikiPages);
       let docxPath;
       let usedAgent = agentResult.usedAgent;
+      let resumeValues;
 
       if (agentResult.usedAgent) {
+        resumeValues = agentResult.values;
         const outputPath = path.join(core.exportDir, "resume-draft.docx");
         try {
           await fsPromises.access(core.defaultDocxTemplatePath);
-          await core.fillDocxTemplate(core.defaultDocxTemplatePath, outputPath, agentResult.values);
+          await core.fillDocxTemplate(core.defaultDocxTemplatePath, outputPath, resumeValues);
           docxPath = outputPath;
         } catch {
           docxPath = await core.writeResumeDocx(wikiPages);
+          resumeValues = core.buildDocxTemplateValues(wikiPages);
           usedAgent = false;
         }
       } else {
+        resumeValues = core.buildDocxTemplateValues(wikiPages);
         docxPath = await core.writeResumeDocx(wikiPages);
       }
+
+      const prevResumeValues = await readResumeValues(resumeValuesPath);
+      await saveResumeValues(resumeValues);
 
       let exportError = null;
       if (outputFormat === "pdf") {
@@ -196,7 +220,9 @@ async function handleApi(req, res) {
       return sendJson(res, {
         exportFiles: await core.listExportFiles(),
         exportError,
-        usedAgent
+        usedAgent,
+        resumeValues,
+        prevResumeValues
       });
     }
 

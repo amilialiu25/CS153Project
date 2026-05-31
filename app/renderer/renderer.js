@@ -46,6 +46,7 @@ const contentActive = document.querySelector("#contentActive");
 const contentTitle = document.querySelector("#contentTitle");
 const contentBody = document.querySelector("#contentBody");
 const resizeHandle = document.querySelector("#resizeHandle");
+const contentActions = document.querySelector("#contentActions");
 
 /* ─── STATE ─── */
 
@@ -572,6 +573,114 @@ function markdownToHtml(content) {
   return blocks.join("");
 }
 
+/* ─── RESUME PREVIEW ─── */
+
+let currentResumeValues = null;
+let prevResumeValues = null;
+let showDiff = false;
+
+function renderResumeField(value, field, prev) {
+  if (!value || value === "Needs clarification") return "";
+  const changed = showDiff && prev && prev[field] && prev[field] !== value;
+  if (changed) {
+    return `<div class="diff-changed"><div class="diff-old">${escapeHtml(prev[field])}</div>${escapeHtml(value)}</div>`;
+  }
+  return escapeHtml(value);
+}
+
+function renderResumeBullet(value, field, prev) {
+  if (!value || value === "Needs clarification") return "";
+  const text = renderResumeField(value, field, prev);
+  return `<li>${text}</li>`;
+}
+
+function buildResumePreviewHtml(rv, prev) {
+  const contact = [rv.phone, rv.email, rv.location].filter(v => v && v !== "Needs clarification").join(" | ");
+  return `<div class="resume-preview">
+    <div class="resume-header">
+      <div class="resume-name">${renderResumeField(rv.candidateName, "candidateName", prev)}</div>
+      <div class="resume-contact">${renderResumeField(contact, "_contact", null)}</div>
+    </div>
+    <div class="resume-section">
+      <div class="resume-section-title">Education</div>
+      <div class="resume-entry">
+        <div class="resume-entry-header">
+          <span class="resume-org">${renderResumeField(rv.schoolName, "schoolName", prev)}</span>
+          <span class="resume-dates">${renderResumeField(rv.educationDates, "educationDates", prev)}</span>
+        </div>
+        <div class="resume-subtitle">${renderResumeField(rv.degree, "degree", prev)} — ${renderResumeField(rv.schoolLocation, "schoolLocation", prev)}</div>
+        <ul class="resume-bullets">
+          ${renderResumeBullet(rv.educationBulletOne, "educationBulletOne", prev)}
+          ${renderResumeBullet(rv.educationBulletTwo, "educationBulletTwo", prev)}
+        </ul>
+      </div>
+    </div>
+    <div class="resume-section">
+      <div class="resume-section-title">Experience</div>
+      <div class="resume-entry">
+        <div class="resume-entry-header">
+          <span class="resume-org">${renderResumeField(rv.companyName, "companyName", prev)}</span>
+          <span class="resume-dates">${renderResumeField(rv.jobDates, "jobDates", prev)}</span>
+        </div>
+        <div class="resume-subtitle">${renderResumeField(rv.roleTitle, "roleTitle", prev)} — ${renderResumeField(rv.jobLocation, "jobLocation", prev)}</div>
+        <ul class="resume-bullets">
+          ${renderResumeBullet(rv.impactBulletOne, "impactBulletOne", prev)}
+          ${renderResumeBullet(rv.impactBulletTwo, "impactBulletTwo", prev)}
+          ${renderResumeBullet(rv.impactBulletThree, "impactBulletThree", prev)}
+        </ul>
+      </div>
+    </div>
+    <div class="resume-section">
+      <div class="resume-section-title">Leadership</div>
+      <div class="resume-entry">
+        <div class="resume-entry-header">
+          <span class="resume-org">${renderResumeField(rv.organizationName, "organizationName", prev)}</span>
+          <span class="resume-dates">${renderResumeField(rv.leadershipDates, "leadershipDates", prev)}</span>
+        </div>
+        <div class="resume-subtitle">${renderResumeField(rv.leadershipRole, "leadershipRole", prev)} — ${renderResumeField(rv.leadershipLocation, "leadershipLocation", prev)}</div>
+        <ul class="resume-bullets">
+          ${renderResumeBullet(rv.leadershipBulletOne, "leadershipBulletOne", prev)}
+        </ul>
+      </div>
+    </div>
+    <div class="resume-section">
+      <div class="resume-section-title">Skills & Interests</div>
+      <div class="resume-skills">${renderResumeField(rv.skills, "skills", prev)}</div>
+      ${rv.interests && rv.interests !== "Needs clarification" ? `<div class="resume-skills" style="margin-top:4px">${renderResumeField(rv.interests, "interests", prev)}</div>` : ""}
+    </div>
+  </div>`;
+}
+
+function openResumePreview() {
+  if (!currentResumeValues) return;
+
+  activePageName = null;
+  highlightActiveInTree();
+  contentTitle.textContent = "Resume Preview";
+
+  const diffBtn = prevResumeValues
+    ? `<button id="diffToggleBtn" class="diff-toggle${showDiff ? " active" : ""}">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V4M4 12h16"/></svg>
+        ${showDiff ? "Hide Changes" : "Show Changes"}
+       </button>`
+    : "";
+
+  contentBody.innerHTML = buildResumePreviewHtml(currentResumeValues, showDiff ? prevResumeValues : null);
+
+  contentActions.innerHTML = diffBtn;
+
+  const toggleBtn = contentActions.querySelector("#diffToggleBtn");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", () => {
+      showDiff = !showDiff;
+      openResumePreview();
+    });
+  }
+
+  contentEmpty.classList.add("hidden");
+  contentActive.classList.remove("hidden");
+}
+
 /* ─── PAGE PREVIEW ─── */
 
 function openPagePreview(fileName) {
@@ -581,6 +690,7 @@ function openPagePreview(fileName) {
   activePageName = fileName;
   contentTitle.textContent = fileName.replace(/\.md$/, "");
   contentBody.innerHTML = markdownToHtml(page.content);
+  contentActions.innerHTML = "";
 
   contentBody.querySelectorAll(".wiki-link").forEach((link) => {
     link.addEventListener("click", () => {
@@ -733,8 +843,19 @@ async function refreshState() {
   renderFileList(templateList, state.templateFiles, "No templates", "template");
   renderFileList(exportList, state.exportFiles, "No exports yet", "export");
 
+  exportList.querySelectorAll(".file-chip").forEach((chip) => {
+    chip.style.cursor = "pointer";
+    chip.addEventListener("click", (e) => {
+      if (e.target.closest(".file-delete-button")) return;
+      if (currentResumeValues) openResumePreview();
+    });
+  });
+
   currentWikiPages = state.wikiPages || [];
   renderWikiFileTree(currentWikiPages);
+
+  if (state.resumeValues) currentResumeValues = state.resumeValues;
+  if (state.prevResumeValues) prevResumeValues = state.prevResumeValues;
 
   if (currentWikiPages.length > 0) {
     graphEmptyState.classList.add("hidden");
@@ -815,11 +936,17 @@ generateResumeButton.addEventListener("click", async () => {
   try {
     const outputFormat = outputFormatInputs.find((input) => input.checked)?.value ?? "docx";
     const result = await resumeCopilot.generateResume({ outputFormat });
+    if (result?.resumeValues) {
+      prevResumeValues = result.prevResumeValues || prevResumeValues;
+      currentResumeValues = result.resumeValues;
+      showDiff = !!prevResumeValues;
+    }
     await refreshState();
     if (result?.exportError) {
       resumeStatusBadge.textContent = "Export error";
       resumeStatusBadge.dataset.state = "warning";
     }
+    if (currentResumeValues) openResumePreview();
   } finally {
     resumeLoadingOverlay.classList.add("hidden");
     generateResumeButton.disabled = false;
