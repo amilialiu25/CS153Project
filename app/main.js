@@ -3,7 +3,9 @@ const {
   AlignmentType,
   BorderStyle,
   Document,
+  LineRuleType,
   Packer,
+  PageOrientation,
   Paragraph,
   LevelFormat,
   TabStopPosition,
@@ -1268,27 +1270,35 @@ function createResumeModel(wikiPages) {
   const skillsContent = getPageContent(wikiPages, "skills.md");
   const bulletsContent = getPageContent(wikiPages, "resume-bullets.md");
   const questionsContent = getPageContent(wikiPages, "open-questions.md");
-  const originalResumeContent = getPageContent(wikiPages, "original-resume.md");
 
-  const summaryLines = extractMarkdownSection(profileContent, "Summary");
-  const skillBullets = extractMarkdownSection(skillsContent, "Detected Skills")
-    .filter((line) => line.startsWith("- "))
-    .slice(0, 8);
-  const resumeBullets = extractTopLevelBullets(
-    extractMarkdownSection(bulletsContent, "Review Notes").length
-      ? bulletsContent.split("## Review Notes")[0]
-      : bulletsContent
-  )
-    .slice(0, 6);
-  const openQuestions = extractTopLevelBullets(questionsContent).slice(0, 5);
-  const importedName = extractLabeledBulletValue(originalResumeContent, "Name");
-  const importedContact = extractLabeledBulletValue(originalResumeContent, "Contact");
+  const candidateName = extractWikiField(profileContent, "Full name")
+    || extractLabeledBulletValue(getPageContent(wikiPages, "original-resume.md"), "Name")
+    || "Candidate Name";
+
+  const phone = extractWikiField(profileContent, "Phone");
+  const email = extractWikiField(profileContent, "Email");
+  const location = extractWikiField(profileContent, "Location");
+  const contactParts = [phone, email, location].filter(Boolean);
+  const contactLine = contactParts.length
+    ? contactParts.join(" | ")
+    : "email@example.com | Phone | Location";
+
+  const skillLines = [];
+  for (const line of skillsContent.split(/\r?\n/)) {
+    const boldMatch = line.match(/^-\s*\*\*([^*]+)\*\*/);
+    if (boldMatch) skillLines.push(`- ${boldMatch[1].trim()}`);
+  }
+
+  const resumeBullets = extractTopResumeBullets(bulletsContent, 6)
+    .map((b) => `- ${b}`);
+  const openQuestions = extractTopLevelBullets(questionsContent).slice(0, 5)
+    .map((line) => stripSourceCitation(line));
 
   return {
-    candidateName: importedName || "Candidate Name",
-    contactLine: importedContact || "email@example.com | Phone | Location | LinkedIn | Portfolio",
-    summaryLines,
-    skillBullets,
+    candidateName,
+    contactLine,
+    summaryLines: [],
+    skillBullets: skillLines.slice(0, 8),
     resumeBullets,
     openQuestions,
     sourceWikiPages: wikiPages.map((page) => page.name)
@@ -1314,24 +1324,165 @@ function stripMarkdown(text) {
     .trim();
 }
 
+function stripSourceCitation(text) {
+  return text.replace(/\s*\(source:\s*[^)]+\)/g, "").trim();
+}
+
+function extractWikiField(content, label) {
+  const regex = new RegExp(`-\\s*\\*\\*${label}\\*\\*:\\s*(.+)`, "i");
+  const match = content.match(regex);
+  if (!match) return "";
+  return stripSourceCitation(match[1]);
+}
+
+function parseWikiH2Sections(content) {
+  const lines = content.split(/\r?\n/);
+  const sections = [];
+  let current = null;
+  const skipPattern = /related pages|open items|note on|connection to|review notes|evidence|source notes|improvement|strengths|structure/i;
+
+  for (const line of lines) {
+    const h2Match = line.match(/^## (.+)/);
+    if (h2Match && !skipPattern.test(h2Match[1])) {
+      if (current) sections.push(current);
+      const heading = h2Match[1].trim();
+      const dashMatch = heading.match(/^(.+?)\s[—–-]\s(.+)$/);
+      current = {
+        heading,
+        org: dashMatch ? dashMatch[1].trim() : heading,
+        role: dashMatch ? dashMatch[2].trim() : "",
+        fields: {},
+        bodyBullets: []
+      };
+    } else if (current) {
+      const fieldMatch = line.match(/^-\s*\*\*([^*]+)\*\*:\s*(.+)/);
+      if (fieldMatch) {
+        current.fields[fieldMatch[1].trim()] = stripSourceCitation(fieldMatch[2]);
+      } else if (/^-\s+/.test(line.trim()) && !line.includes("**")) {
+        current.bodyBullets.push(stripSourceCitation(stripMarkdown(line.trim())));
+      }
+    }
+  }
+  if (current) sections.push(current);
+  return sections;
+}
+
+function extractEducationHighlights(content) {
+  const highlights = [];
+  const lines = content.split(/\r?\n/);
+
+  const scores = [];
+  const gpa = extractWikiField(content, "Cumulative GPA");
+  if (gpa) scores.push(`GPA: ${gpa}`);
+  const gre = extractWikiField(content, "GRE");
+  if (gre) scores.push(`GRE: ${gre}`);
+
+  let currentH3 = "";
+  const honors = [];
+  const courses = [];
+
+  for (const line of lines) {
+    const h3Match = line.match(/^### (.+)/);
+    if (h3Match) { currentH3 = h3Match[1].trim().toLowerCase(); continue; }
+    if (line.startsWith("## ")) { currentH3 = ""; continue; }
+
+    if (/^-\s+/.test(line.trim())) {
+      const item = stripSourceCitation(stripMarkdown(line.trim()));
+      if (currentH3.includes("honors") || currentH3.includes("activities")) {
+        honors.push(item);
+      } else if (currentH3.includes("coursework")) {
+        courses.push(item);
+      }
+    }
+  }
+
+  const bulletOne = [...scores, ...honors].filter(Boolean).join("; ");
+  if (bulletOne) highlights.push(bulletOne);
+  if (courses.length) highlights.push(`Relevant Coursework: ${courses.join(", ")}`);
+
+  return highlights;
+}
+
+function extractTopResumeBullets(content, max = 8) {
+  const lines = content.split(/\r?\n/);
+  const topHeader = lines.findIndex(line => /^##.*Top.*Strongest/i.test(line.trim()));
+
+  if (topHeader >= 0) {
+    const bullets = [];
+    for (let i = topHeader + 1; i < lines.length; i++) {
+      if (lines[i].startsWith("## ")) break;
+      const numMatch = lines[i].match(/^\d+\.\s*(?:⭐\s*)?(.+)/);
+      if (numMatch) {
+        bullets.push(stripSourceCitation(numMatch[1].trim()));
+      }
+    }
+    if (bullets.length) return bullets.slice(0, max);
+  }
+
+  return lines
+    .filter(line => /^-\s+/.test(line.trim()) && !line.includes("**") && line.trim().length > 40)
+    .map(line => stripSourceCitation(stripMarkdown(line.trim())))
+    .slice(0, max);
+}
+
+function extractSectionResumeBullets(content, orgName, max = 3) {
+  if (!orgName) return [];
+  const lines = content.split(/\r?\n/);
+  const sectionHeader = lines.findIndex(line =>
+    line.startsWith("## ") && line.includes(orgName) && !/Top.*Strongest/i.test(line)
+  );
+
+  if (sectionHeader < 0) return [];
+
+  const bullets = [];
+  for (let i = sectionHeader + 1; i < lines.length; i++) {
+    if (lines[i].startsWith("## ")) break;
+    if (/^-\s+/.test(lines[i].trim()) && !lines[i].includes("**")) {
+      bullets.push(stripSourceCitation(stripMarkdown(lines[i].trim())));
+    }
+  }
+
+  return bullets.slice(0, max);
+}
+
+function extractSkillsText(content) {
+  const skills = [];
+  const lines = content.split(/\r?\n/);
+
+  for (const line of lines) {
+    const boldMatch = line.match(/^-\s*\*\*([^*]+)\*\*/);
+    if (boldMatch) {
+      skills.push(boldMatch[1].trim());
+    }
+  }
+
+  return skills.length ? skills.join(", ") : "Needs clarification";
+}
+
+function extractInterestsText(content) {
+  const lines = content.split(/\r?\n/);
+  const headerIndex = lines.findIndex(line => /^##\s+Interests/i.test(line));
+  if (headerIndex < 0) return "Needs clarification";
+
+  const items = [];
+  for (let i = headerIndex + 1; i < lines.length; i++) {
+    if (lines[i].startsWith("## ")) break;
+    if (/^-\s+/.test(lines[i].trim())) {
+      items.push(stripSourceCitation(stripMarkdown(lines[i].trim())));
+    }
+  }
+
+  return items.length ? items.join(", ") : "Needs clarification";
+}
+
 function sectionHeading(text) {
   return new Paragraph({
-    spacing: { before: 180, after: 40 },
+    spacing: { before: 120, after: 20, line: 240, lineRule: LineRuleType.AUTO },
     border: {
-      bottom: {
-        color: "111111",
-        space: 1,
-        style: BorderStyle.SINGLE,
-        size: 6
-      }
+      bottom: { color: "111111", space: 1, style: BorderStyle.SINGLE, size: 6 }
     },
     children: [
-      new TextRun({
-        text,
-        bold: true,
-        size: 22,
-        font: "Times New Roman"
-      })
+      new TextRun({ text, bold: true, size: 21, font: "Times New Roman" })
     ]
   });
 }
@@ -1339,7 +1490,7 @@ function sectionHeading(text) {
 function bodyParagraph(text, options = {}) {
   return new Paragraph({
     alignment: options.alignment,
-    spacing: { before: options.before ?? 0, after: options.after ?? 30 },
+    spacing: { before: options.before ?? 0, after: options.after ?? 20, line: 240, lineRule: LineRuleType.AUTO },
     indent: options.indent,
     tabStops: options.tabStops,
     bullet: options.bullet,
@@ -1356,163 +1507,289 @@ function bodyParagraph(text, options = {}) {
   });
 }
 
-function resumeEntryParagraph(left, right = "") {
+const CONTENT_WIDTH = 12240 - 720 - 720;
+
+function resumeEntryLine1(org, dates) {
   return new Paragraph({
-    spacing: { before: 60, after: 10 },
-    tabStops: [
-      {
-        type: TabStopType.RIGHT,
-        position: TabStopPosition.MAX
-      }
-    ],
+    spacing: { before: 40, after: 0, line: 240, lineRule: LineRuleType.AUTO },
+    tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_WIDTH }],
     children: [
-      new TextRun({
-        text: stripMarkdown(left),
-        bold: true,
-        size: 22,
-        font: "Times New Roman"
-      }),
-      new TextRun({
-        text: right ? `\t${stripMarkdown(right)}` : "",
-        size: 22,
-        font: "Times New Roman"
-      })
+      new TextRun({ text: stripMarkdown(org || ""), bold: true, size: 21, font: "Times New Roman" }),
+      ...(dates ? [new TextRun({ text: `\t${stripMarkdown(dates)}`, size: 21, font: "Times New Roman" })] : [])
     ]
   });
 }
 
-function buildResumeDocx(wikiPages) {
-  const model = createResumeModel(wikiPages);
-  const experienceBullets = model.resumeBullets.length
-    ? model.resumeBullets
-    : ["No grounded bullet candidates available yet."];
-  const skills = model.skillBullets.length
-    ? model.skillBullets.map(stripMarkdown).join(", ")
-    : "No grounded skills available yet.";
-  const questions = model.openQuestions.length
-    ? model.openQuestions
-    : ["No open questions recorded."];
+function resumeEntryLine2(role, location) {
+  const subtitle = [role, location].filter(Boolean).join(" — ");
+  if (!subtitle) return null;
+  return new Paragraph({
+    spacing: { before: 0, after: 0, line: 240, lineRule: LineRuleType.AUTO },
+    children: [
+      new TextRun({ text: stripMarkdown(subtitle), italics: true, size: 20, font: "Times New Roman" })
+    ]
+  });
+}
+
+function buildFullResumeValues(wikiPages) {
+  const profile = getPageContent(wikiPages, "profile.md");
+  const educationPage = getPageContent(wikiPages, "education.md");
+  const workPage = getPageContent(wikiPages, "work-experience.md");
+  const leadershipPage = getPageContent(wikiPages, "leadership-experience.md");
+  const skillsPage = getPageContent(wikiPages, "skills.md");
+  const bulletsPage = getPageContent(wikiPages, "resume-bullets.md");
+
+  const candidateName = extractWikiField(profile, "Full name") || "Needs clarification";
+  const phone = extractWikiField(profile, "Phone") || "";
+  const email = extractWikiField(profile, "Email") || "";
+  const location = extractWikiField(profile, "Location") || "";
+
+  const eduSections = parseWikiH2Sections(educationPage);
+  const education = eduSections.map((sec) => {
+    const gpa = sec.fields["Cumulative GPA"];
+    const gre = sec.fields.GRE;
+    const sat = sec.fields.SAT;
+    const scores = [gpa ? `GPA: ${gpa}` : "", gre ? `GRE: ${gre}` : "", sat ? `SAT: ${sat}` : ""].filter(Boolean);
+    const bullets = [];
+    if (scores.length) bullets.push(scores.join(", "));
+
+    const lines = educationPage.split(/\r?\n/);
+    let inThisSection = false;
+    let currentH3 = "";
+    const honors = [];
+    const courses = [];
+    for (const line of lines) {
+      if (line.startsWith("## ") && line.includes(sec.org)) { inThisSection = true; continue; }
+      if (line.startsWith("## ") && inThisSection) break;
+      if (!inThisSection) continue;
+      const h3 = line.match(/^### (.+)/);
+      if (h3) { currentH3 = h3[1].toLowerCase(); continue; }
+      if (/^-\s+/.test(line.trim())) {
+        const item = stripSourceCitation(stripMarkdown(line.trim()));
+        if (currentH3.includes("honors") || currentH3.includes("activities")) honors.push(item);
+        else if (currentH3.includes("coursework")) courses.push(item);
+      }
+    }
+    if (honors.length) bullets.push(honors.join(", "));
+    if (courses.length) bullets.push(`Relevant Coursework: ${courses.join(", ")}`);
+
+    return {
+      schoolName: sec.org,
+      schoolLocation: sec.fields.Location || "",
+      degree: sec.fields.Degree || sec.role || "",
+      dates: sec.fields.Dates || sec.fields.Graduation || "",
+      bullets
+    };
+  });
+
+  const workSections = parseWikiH2Sections(workPage);
+  const leaderSections = parseWikiH2Sections(leadershipPage);
+  const totalEntries = eduSections.length + workSections.length + leaderSections.length;
+
+  const workBulletLimit = (i) => {
+    if (totalEntries <= 6) return i < 2 ? 3 : 2;
+    if (totalEntries <= 8) return i < 1 ? 3 : 2;
+    return i < 1 ? 2 : 1;
+  };
+  const leaderBulletLimit = totalEntries <= 6 ? 2 : 1;
+
+  const experience = workSections.map((sec, i) => ({
+    companyName: sec.org,
+    roleTitle: sec.role || "",
+    location: sec.fields.Location || "",
+    dates: sec.fields.Dates || "",
+    bullets: extractSectionResumeBullets(bulletsPage, sec.org, workBulletLimit(i))
+  }));
+
+  const leadership = leaderSections.map((sec) => ({
+    organizationName: sec.org,
+    role: sec.role || "",
+    location: sec.fields.Location || "",
+    dates: sec.fields.Dates || "",
+    bullets: extractSectionResumeBullets(bulletsPage, sec.org, leaderBulletLimit)
+  }));
+
+  return {
+    candidateName,
+    phone,
+    email,
+    location,
+    education,
+    experience,
+    leadership,
+    skills: extractSkillsText(skillsPage),
+    interests: extractInterestsText(skillsPage)
+  };
+}
+
+function estimateLines(text, charsPerLine = 100) {
+  return Math.ceil(stripMarkdown(text).length / charsPerLine) || 1;
+}
+
+function estimateResumeLines(rv) {
+  let lines = 4;
+  const entryOverhead = 2;
+
+  for (const e of (rv.education || [])) {
+    lines += entryOverhead;
+    for (const b of (e.bullets || [])) lines += estimateLines(b);
+  }
+  lines += 1;
+  for (const e of (rv.experience || [])) {
+    lines += entryOverhead;
+    for (const b of (e.bullets || [])) lines += estimateLines(b);
+  }
+  if (rv.leadership && rv.leadership.length) {
+    lines += 1;
+    for (const e of rv.leadership) {
+      lines += entryOverhead;
+      for (const b of (e.bullets || [])) lines += estimateLines(b);
+    }
+  }
+  lines += 1;
+  if (rv.skills) lines += estimateLines(rv.skills);
+  if (rv.interests) lines += estimateLines(rv.interests);
+  return lines;
+}
+
+function trimBullets(entries, limit) {
+  return entries.map((e, i) => ({
+    ...e,
+    bullets: (e.bullets || []).slice(0, typeof limit === "function" ? limit(i) : limit)
+  }));
+}
+
+function trimResumeValues(rv, maxLines = 62) {
+  rv = JSON.parse(JSON.stringify(rv));
+
+  if (estimateResumeLines(rv) <= maxLines) return rv;
+
+  if (rv.leadership && rv.leadership.length > 3) {
+    rv.leadership = rv.leadership.slice(0, 3);
+  }
+  if (rv.leadership) {
+    rv.leadership = trimBullets(rv.leadership, 1);
+  }
+  if (estimateResumeLines(rv) <= maxLines) return rv;
+
+  if (rv.experience) {
+    rv.experience = trimBullets(rv.experience, (i) => i < 2 ? 3 : 2);
+  }
+  if (estimateResumeLines(rv) <= maxLines) return rv;
+
+  if (rv.leadership && rv.leadership.length > 2) {
+    rv.leadership = rv.leadership.slice(0, 2);
+  }
+  if (estimateResumeLines(rv) <= maxLines) return rv;
+
+  if (rv.experience) {
+    rv.experience = trimBullets(rv.experience, (i) => i < 1 ? 3 : 1);
+  }
+  if (estimateResumeLines(rv) <= maxLines) return rv;
+
+  if (rv.experience) {
+    rv.experience = trimBullets(rv.experience, (i) => i < 1 ? 2 : 1);
+  }
+  if (rv.education) {
+    rv.education = trimBullets(rv.education, 1);
+  }
+
+  return rv;
+}
+
+function buildResumeDocxFromValues(rv) {
+  const contactLine = [rv.phone, rv.email, rv.location].filter(Boolean).join(" | ");
+  const children = [];
+
+  children.push(
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 20, line: 240, lineRule: LineRuleType.AUTO },
+      children: [new TextRun({ text: rv.candidateName.toUpperCase(), bold: true, size: 28, font: "Times New Roman", characterSpacing: 40 })]
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 60, line: 240, lineRule: LineRuleType.AUTO },
+      children: [new TextRun({ text: contactLine || "Needs clarification", size: 20, font: "Times New Roman" })]
+    })
+  );
+
+  children.push(sectionHeading("EDUCATION"));
+  for (const edu of (rv.education || [])) {
+    children.push(resumeEntryLine1(edu.schoolName, edu.dates));
+    const sub = resumeEntryLine2(edu.degree, edu.schoolLocation);
+    if (sub) children.push(sub);
+    for (const bullet of (edu.bullets || [])) {
+      children.push(bodyParagraph(bullet, { numbering: { reference: "resume-bullets", level: 0 } }));
+    }
+  }
+
+  children.push(sectionHeading("EXPERIENCE"));
+  for (const job of (rv.experience || [])) {
+    children.push(resumeEntryLine1(job.companyName, job.dates));
+    const sub = resumeEntryLine2(job.roleTitle, job.location);
+    if (sub) children.push(sub);
+    for (const bullet of (job.bullets || [])) {
+      children.push(bodyParagraph(bullet, { numbering: { reference: "resume-bullets", level: 0 } }));
+    }
+  }
+
+  if (rv.leadership && rv.leadership.length) {
+    children.push(sectionHeading("LEADERSHIP"));
+    for (const entry of rv.leadership) {
+      children.push(resumeEntryLine1(entry.organizationName, entry.dates));
+      const sub = resumeEntryLine2(entry.role, entry.location);
+      if (sub) children.push(sub);
+      for (const bullet of (entry.bullets || [])) {
+        children.push(bodyParagraph(bullet, { numbering: { reference: "resume-bullets", level: 0 } }));
+      }
+    }
+  }
+
+  children.push(sectionHeading("SKILLS & INTERESTS"));
+  if (rv.skills) children.push(bodyParagraph(rv.skills));
+  if (rv.interests && rv.interests !== "Needs clarification") {
+    children.push(bodyParagraph(rv.interests));
+  }
 
   return new Document({
     numbering: {
-      config: [
-        {
-          reference: "resume-bullets",
-          levels: [
-            {
-              level: 0,
-              format: LevelFormat.BULLET,
-              text: "\u2022",
-              style: {
-                paragraph: {
-                  indent: {
-                    left: 360,
-                    hanging: 180
-                  }
-                },
-                run: {
-                  font: "Times New Roman",
-                  size: 20
-                }
-              }
-            }
-          ]
-        }
-      ]
+      config: [{
+        reference: "resume-bullets",
+        levels: [{
+          level: 0,
+          format: LevelFormat.BULLET,
+          text: "\u2022",
+          style: {
+            paragraph: { indent: { left: 360, hanging: 180 } },
+            run: { font: "Times New Roman", size: 20 }
+          }
+        }]
+      }]
     },
     styles: {
       default: {
         document: {
-          run: {
-            font: "Times New Roman",
-            size: 20
-          },
-          paragraph: {
-            spacing: { after: 30 }
-          }
+          run: { font: "Times New Roman", size: 20 },
+          paragraph: { spacing: { after: 20, line: 240, lineRule: LineRuleType.AUTO } }
         }
       }
     },
-    sections: [
-      {
-        properties: {
-          page: {
-            margin: {
-              top: 720,
-              right: 720,
-              bottom: 720,
-              left: 720
-            }
-          }
-        },
-        children: [
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 20 },
-            children: [
-              new TextRun({
-                text: model.candidateName,
-                size: 30,
-                font: "Times New Roman"
-              })
-            ]
-          }),
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 80 },
-            children: [
-              new TextRun({
-                text: model.contactLine,
-                size: 22,
-                font: "Times New Roman"
-              })
-            ]
-          }),
-          sectionHeading("EDUCATION"),
-          bodyParagraph("Needs clarification.", { italics: true, size: 22 }),
-          sectionHeading("WORK EXPERIENCE"),
-          resumeEntryParagraph("Organization - Role | Location", "Dates"),
-          ...experienceBullets.map((bullet) =>
-            bodyParagraph(bullet, {
-              numbering: { reference: "resume-bullets", level: 0 },
-              size: 20
-            })
-          ),
-          sectionHeading("LEADERSHIP EXPERIENCE"),
-          bodyParagraph("Needs clarification.", { italics: true, size: 22 }),
-          sectionHeading("SKILLS, ACTIVITIES & INTERESTS"),
-          bodyParagraph(`Languages & Skills: ${skills}`, { size: 20 }),
-          sectionHeading("OPEN QUESTIONS"),
-          ...questions.map((question) =>
-            bodyParagraph(question, {
-              numbering: { reference: "resume-bullets", level: 0 },
-              size: 20
-            })
-          )
-        ]
-      }
-    ]
+    sections: [{
+      properties: {
+        page: {
+          size: { width: 12240, height: 15840, orientation: PageOrientation.PORTRAIT },
+          margin: { top: 500, right: 720, bottom: 500, left: 720, header: 0, footer: 0, gutter: 0 }
+        }
+      },
+      children
+    }]
   });
 }
 
-async function writeResumeDocx(wikiPages) {
-  const originalResumePath = await getPrimaryOriginalResumeDocxPath();
-  if (originalResumePath) {
-    const outputPath = path.join(exportDir, "resume-draft.docx");
-    await fs.copyFile(originalResumePath, outputPath);
-    return outputPath;
-  }
-
-  try {
-    await fs.access(defaultDocxTemplatePath);
-    const outputPath = path.join(exportDir, "resume-draft.docx");
-    await fillDocxTemplate(defaultDocxTemplatePath, outputPath, buildDocxTemplateValues(wikiPages));
-    return outputPath;
-  } catch {
-    // Fall back to the programmatic builder if the DOCX template is missing or invalid.
-  }
-
-  const doc = buildResumeDocx(wikiPages);
+async function writeResumeDocx(wikiPages, resumeValues) {
+  const rv = trimResumeValues(resumeValues || buildFullResumeValues(wikiPages));
+  const doc = buildResumeDocxFromValues(rv);
   const buffer = await Packer.toBuffer(doc);
   const outputPath = path.join(exportDir, "resume-draft.docx");
   await fs.writeFile(outputPath, buffer);
@@ -1526,38 +1803,56 @@ async function getPrimaryOriginalResumeDocxPath() {
 }
 
 function buildDocxTemplateValues(wikiPages) {
-  const model = createResumeModel(wikiPages);
-  const experienceBullets = model.resumeBullets.map(stripMarkdown);
-  const contactParts = model.contactLine.split("|").map((part) => part.trim());
-  const skillText = model.skillBullets.length
-    ? model.skillBullets.map(stripMarkdown).join(", ")
-    : "Needs clarification.";
+  const profile = getPageContent(wikiPages, "profile.md");
+  const education = getPageContent(wikiPages, "education.md");
+  const work = getPageContent(wikiPages, "work-experience.md");
+  const leadership = getPageContent(wikiPages, "leadership-experience.md");
+  const skillsPage = getPageContent(wikiPages, "skills.md");
+  const bulletsPage = getPageContent(wikiPages, "resume-bullets.md");
+
+  const candidateName = extractWikiField(profile, "Full name") || "Needs clarification";
+  const phone = extractWikiField(profile, "Phone") || "Needs clarification";
+  const email = extractWikiField(profile, "Email") || "Needs clarification";
+  const location = extractWikiField(profile, "Location") || "Needs clarification";
+
+  const eduSections = parseWikiH2Sections(education);
+  const edu = eduSections[0] || { org: "Needs clarification", role: "", fields: {} };
+  const eduHighlights = extractEducationHighlights(education);
+
+  const workSections = parseWikiH2Sections(work);
+  const job = workSections[0] || { org: "Needs clarification", role: "", fields: {} };
+
+  const leaderSections = parseWikiH2Sections(leadership);
+  const leader = leaderSections[0] || { org: "Needs clarification", role: "", fields: {} };
+
+  const topBullets = extractTopResumeBullets(bulletsPage);
+  const leaderBullets = extractSectionResumeBullets(bulletsPage, leader.org);
 
   return {
-    candidateName: model.candidateName,
-    phone: contactParts[0] || "Phone",
-    email: contactParts[1] || "email@example.com",
-    location: contactParts[2] || "Location",
-    schoolName: "School Name",
-    schoolLocation: "School Location",
-    degree: "Degree or Program",
-    educationDates: "Dates",
-    educationBulletOne: "Education detail or academic achievement.",
-    educationBulletTwo: "Relevant coursework, honors, or activities.",
-    companyName: "Organization",
-    roleTitle: "Role Title",
-    jobLocation: "Location",
-    jobDates: "Dates",
-    impactBulletOne: experienceBullets[0] ?? "Grounded resume bullet from wiki evidence.",
-    impactBulletTwo: experienceBullets[1] ?? "Grounded resume bullet from wiki evidence.",
-    impactBulletThree: experienceBullets[2] ?? "Grounded resume bullet from wiki evidence.",
-    organizationName: "Organization",
-    leadershipRole: "Leadership Role",
-    leadershipLocation: "Location",
-    leadershipDates: "Dates",
-    leadershipBulletOne: experienceBullets[3] ?? "Grounded leadership or project bullet from wiki evidence.",
-    skills: skillText,
-    interests: "Optional interests or activities."
+    candidateName,
+    phone,
+    email,
+    location,
+    schoolName: edu.org || "Needs clarification",
+    schoolLocation: edu.fields.Location || "Needs clarification",
+    degree: edu.fields.Degree || edu.role || "Needs clarification",
+    educationDates: edu.fields.Dates || edu.fields.Graduation || "Needs clarification",
+    educationBulletOne: eduHighlights[0] || "Needs clarification",
+    educationBulletTwo: eduHighlights[1] || "Needs clarification",
+    companyName: job.org || "Needs clarification",
+    roleTitle: job.role || "Needs clarification",
+    jobLocation: job.fields.Location || "Needs clarification",
+    jobDates: job.fields.Dates || "Needs clarification",
+    impactBulletOne: topBullets[0] || "Needs clarification",
+    impactBulletTwo: topBullets[1] || "Needs clarification",
+    impactBulletThree: topBullets[2] || "Needs clarification",
+    organizationName: leader.org || "Needs clarification",
+    leadershipRole: leader.role || "Needs clarification",
+    leadershipLocation: leader.fields.Location || "Needs clarification",
+    leadershipDates: leader.fields.Dates || "Needs clarification",
+    leadershipBulletOne: leaderBullets[0] || topBullets[3] || "Needs clarification",
+    skills: extractSkillsText(skillsPage),
+    interests: extractInterestsText(skillsPage)
   };
 }
 
@@ -1720,6 +2015,8 @@ module.exports = {
   buildWikiPages,
   writeWikiPages,
   writeResumeDocx,
+  buildFullResumeValues,
+  trimResumeValues,
   fillDocxTemplate,
   buildDocxTemplateValues,
   convertDocxToPdf,

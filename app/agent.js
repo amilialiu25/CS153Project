@@ -252,28 +252,69 @@ function buildResumePrompt(wikiPages) {
     .map((p) => `### ${p.name}\n${p.content}`)
     .join("\n\n");
 
-  return `You are a professional resume data extractor. Given the wiki pages below, extract the best values for a resume template. Return ONLY a JSON code block with exactly these keys:
+  return `You are a professional resume editor. Given the wiki pages below, produce a polished, ONE-PAGE resume as structured JSON. The resume must fit on a single page, so you must curate aggressively. Return ONLY a JSON code block.
 
-${TEMPLATE_FIELDS.join(", ")}
+## One-page constraint
 
-## Field descriptions
-- candidateName: full name of the candidate
-- phone, email, location: contact details (parse from contact line if needed)
-- schoolName, schoolLocation, degree, educationDates: most prominent education
-- educationBulletOne, educationBulletTwo: strongest academic achievements or coursework highlights
-- companyName, roleTitle, jobLocation, jobDates: most recent or most impactful work experience
-- impactBulletOne/Two/Three: the 3 strongest achievement bullets with metrics, starting with action verbs
-- organizationName, leadershipRole, leadershipLocation, leadershipDates: most notable leadership experience
-- leadershipBulletOne: strongest leadership achievement bullet
-- skills: comma-separated list of categorized skills
-- interests: interests and activities that show personality
+A standard one-page resume fits roughly:
+- 2 education entries (1-2 bullets each)
+- 3-4 work experiences (2-3 bullets each for recent roles, 1-2 for older)
+- 1-2 leadership entries (1 bullet each)
+- 1 skills line, 1 interests line
+
+When the wiki has MORE content than fits one page:
+- Keep all experiences but REDUCE bullets — prioritize quantified impact over descriptions.
+- For the most recent / most impactful role: up to 3 bullets.
+- For older or less impactful roles: 1-2 bullets maximum.
+- Merge overlapping achievements into single concise bullets instead of listing separately.
+- Drop bullets that lack metrics or concrete outcomes.
+- Leadership entries with minor impact (e.g. a hobby project) can be cut to make room for stronger content.
+
+## Output structure
+
+{
+  "candidateName": "full name",
+  "phone": "phone number",
+  "email": "email address",
+  "location": "city, state",
+  "education": [
+    {
+      "schoolName": "University Name",
+      "schoolLocation": "City, State",
+      "degree": "Degree type and major",
+      "dates": "Start – End",
+      "bullets": ["GPA, test scores, honors", "Relevant coursework"]
+    }
+  ],
+  "experience": [
+    {
+      "companyName": "Company",
+      "roleTitle": "Title",
+      "location": "City, State",
+      "dates": "Start – End",
+      "bullets": ["Achievement bullet 1", "Achievement bullet 2"]
+    }
+  ],
+  "leadership": [
+    {
+      "organizationName": "Organization",
+      "role": "Title",
+      "location": "City, State",
+      "dates": "Start – End",
+      "bullets": ["Achievement bullet 1"]
+    }
+  ],
+  "skills": "Categorized skills string",
+  "interests": "Interests and activities"
+}
 
 ## Rules
-- Extract values directly from the wiki content. Do not invent information.
-- For bullet fields: use concise, polished action-verb statements with metrics when available.
-- For missing fields: use "Needs clarification" as the value.
-- Choose the most recent or most impactful experience for the primary slots.
-- Prioritize bullets that have quantified impact metrics.
+- Include ALL education entries, work experiences, and leadership roles from the wiki — do not drop any.
+- Order each array from most recent to oldest.
+- For bullet fields: use concise, polished action-verb statements with quantified metrics when available.
+- Do not include source citations like "(source: filename)" in the output.
+- Do not invent information not found in the wiki.
+- For missing data use "Needs clarification".
 
 ## Wiki pages
 
@@ -321,11 +362,14 @@ async function generateResumeValues(wikiPages) {
     const output = await runClaude(detection.cli, prompt, RESUME_TIMEOUT_MS);
     const parsed = parseAgentJson(output);
 
-    for (const field of TEMPLATE_FIELDS) {
-      if (typeof parsed[field] !== "string") {
-        parsed[field] = "Needs clarification";
-      }
+    if (!parsed.candidateName || typeof parsed.candidateName !== "string") {
+      parsed.candidateName = "Needs clarification";
     }
+    if (!Array.isArray(parsed.education)) parsed.education = [];
+    if (!Array.isArray(parsed.experience)) parsed.experience = [];
+    if (!Array.isArray(parsed.leadership)) parsed.leadership = [];
+    if (typeof parsed.skills !== "string") parsed.skills = "Needs clarification";
+    if (typeof parsed.interests !== "string") parsed.interests = "Needs clarification";
 
     console.log("Agent-backed resume extraction complete.");
     return { values: parsed, usedAgent: true };

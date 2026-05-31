@@ -20,7 +20,7 @@
   --font-sans: 'Outfit', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
   --sidebar-w: 260px;
-  --graph-w: 420px;
+  --graph-w: 734px;
   --transition: 150ms ease;
 }
 
@@ -796,6 +796,20 @@ button, input { font: inherit; }
   text-decoration: line-through;
   margin-bottom: 2px;
   opacity: 0.6;
+}
+
+.diff-new {
+  border-left: 2px solid #50c878;
+  padding-left: 8px;
+  margin-left: -10px;
+}
+
+.diff-removed {
+  border-left: 2px solid #c85050;
+  padding-left: 8px;
+  margin-left: -10px;
+  opacity: 0.5;
+  text-decoration: line-through;
 }
 
 /* ─── RESPONSIVE ─── */
