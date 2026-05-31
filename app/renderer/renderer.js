@@ -197,6 +197,13 @@ class GraphEngine {
     this.scale = 1;
     this.offsetX = 0;
     this.offsetY = 0;
+    this._fitDone = false;
+    setTimeout(() => {
+      if (this._fitDone) return;
+      for (let i = 0; i < 300; i++) this._simulate();
+      this._fitDone = true;
+      this._autoFit();
+    }, 500);
     this.start();
   }
 
@@ -215,10 +222,9 @@ class GraphEngine {
   }
 
   reset() {
-    this.scale = 1;
-    this.offsetX = 0;
-    this.offsetY = 0;
-    if (this.nodes.length && currentWikiPages.length) {
+    if (this.nodes.length) {
+      this._autoFit();
+    } else if (currentWikiPages.length) {
       this.setData(currentWikiPages);
     }
   }
@@ -229,10 +235,29 @@ class GraphEngine {
     this.animFrame = requestAnimationFrame(this._tick);
   }
 
+  _autoFit() {
+    if (!this.nodes.length) return;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const n of this.nodes) {
+      minX = Math.min(minX, n.x);
+      minY = Math.min(minY, n.y);
+      maxX = Math.max(maxX, n.x);
+      maxY = Math.max(maxY, n.y);
+    }
+    const pad = 60;
+    const bw = (maxX - minX) + pad * 2;
+    const bh = (maxY - minY) + pad * 2;
+    const bcx = (minX + maxX) / 2;
+    const bcy = (minY + maxY) / 2;
+    this.scale = Math.min(this.width / bw, this.height / bh);
+    this.offsetX = this.width / 2 - bcx * this.scale;
+    this.offsetY = this.height / 2 - bcy * this.scale;
+  }
+
   _simulate() {
-    const repulsion = 700;
-    const attraction = 0.008;
-    const centerPull = 0.012;
+    const repulsion = 120;
+    const attraction = 0.015;
+    const centerPull = 0.03;
     const cx = this.width / 2;
     const cy = this.height / 2;
 
@@ -594,8 +619,85 @@ function renderResumeBullet(value, field, prev) {
   return `<li>${text}</li>`;
 }
 
+function findPrevEntry(prevArr, orgKey, orgName) {
+  if (!prevArr || !Array.isArray(prevArr)) return null;
+  return prevArr.find(e => e[orgKey] === orgName) || null;
+}
+
+function renderEntryHtml(entry, orgKey, roleKey, locationKey, datesKey, prevEntry, isNew) {
+  const org = entry[orgKey] || "";
+  const role = entry[roleKey] || "";
+  const loc = entry[locationKey] || "";
+  const dates = entry[datesKey] || "";
+  const bullets = Array.isArray(entry.bullets) ? entry.bullets : [];
+  const prevBullets = prevEntry && Array.isArray(prevEntry.bullets) ? prevEntry.bullets : [];
+  const subtitle = [role, loc].filter(Boolean).join(" — ");
+
+  const entryClass = isNew ? "resume-entry diff-new" : "resume-entry";
+
+  let bulletsHtml = "";
+  if (bullets.length) {
+    const items = bullets.map(b => {
+      const existed = prevBullets.some(pb => pb === b);
+      if (!isNew && !existed && showDiff) {
+        return `<li class="diff-new">${escapeHtml(b)}</li>`;
+      }
+      return `<li>${escapeHtml(b)}</li>`;
+    });
+    if (showDiff && prevEntry) {
+      const removed = prevBullets.filter(pb => !bullets.includes(pb));
+      for (const rb of removed) {
+        items.push(`<li class="diff-removed">${escapeHtml(rb)}</li>`);
+      }
+    }
+    bulletsHtml = `<ul class="resume-bullets">${items.join("")}</ul>`;
+  }
+
+  return `<div class="${entryClass}">
+    <div class="resume-entry-header">
+      <span class="resume-org">${escapeHtml(org)}</span>
+      <span class="resume-dates">${escapeHtml(dates)}</span>
+    </div>
+    ${subtitle ? `<div class="resume-subtitle">${escapeHtml(subtitle)}</div>` : ""}
+    ${bulletsHtml}
+  </div>`;
+}
+
+function renderSectionHtml(entries, orgKey, roleKey, locationKey, datesKey, prevEntries) {
+  let html = "";
+  for (const entry of entries) {
+    const prevEntry = showDiff ? findPrevEntry(prevEntries, orgKey, entry[orgKey]) : null;
+    const isNew = showDiff && prevEntries && Array.isArray(prevEntries) && !prevEntry;
+    html += renderEntryHtml(entry, orgKey, roleKey, locationKey, datesKey, prevEntry, isNew);
+  }
+  if (showDiff && prevEntries && Array.isArray(prevEntries)) {
+    for (const pe of prevEntries) {
+      const stillExists = entries.some(e => e[orgKey] === pe[orgKey]);
+      if (!stillExists) {
+        html += `<div class="resume-entry diff-removed">
+          <div class="resume-entry-header"><span class="resume-org">${escapeHtml(pe[orgKey] || "")}</span></div>
+        </div>`;
+      }
+    }
+  }
+  return html;
+}
+
 function buildResumePreviewHtml(rv, prev) {
   const contact = [rv.phone, rv.email, rv.location].filter(v => v && v !== "Needs clarification").join(" | ");
+
+  const eduEntries = Array.isArray(rv.education) ? rv.education : [];
+  const expEntries = Array.isArray(rv.experience) ? rv.experience : [];
+  const leaderEntries = Array.isArray(rv.leadership) ? rv.leadership : [];
+
+  const prevEdu = prev && Array.isArray(prev.education) ? prev.education : null;
+  const prevExp = prev && Array.isArray(prev.experience) ? prev.experience : null;
+  const prevLeader = prev && Array.isArray(prev.leadership) ? prev.leadership : null;
+
+  const eduHtml = renderSectionHtml(eduEntries, "schoolName", "degree", "schoolLocation", "dates", prevEdu);
+  const expHtml = renderSectionHtml(expEntries, "companyName", "roleTitle", "location", "dates", prevExp);
+  const leaderHtml = renderSectionHtml(leaderEntries, "organizationName", "role", "location", "dates", prevLeader);
+
   return `<div class="resume-preview">
     <div class="resume-header">
       <div class="resume-name">${renderResumeField(rv.candidateName, "candidateName", prev)}</div>
@@ -603,46 +705,16 @@ function buildResumePreviewHtml(rv, prev) {
     </div>
     <div class="resume-section">
       <div class="resume-section-title">Education</div>
-      <div class="resume-entry">
-        <div class="resume-entry-header">
-          <span class="resume-org">${renderResumeField(rv.schoolName, "schoolName", prev)}</span>
-          <span class="resume-dates">${renderResumeField(rv.educationDates, "educationDates", prev)}</span>
-        </div>
-        <div class="resume-subtitle">${renderResumeField(rv.degree, "degree", prev)} — ${renderResumeField(rv.schoolLocation, "schoolLocation", prev)}</div>
-        <ul class="resume-bullets">
-          ${renderResumeBullet(rv.educationBulletOne, "educationBulletOne", prev)}
-          ${renderResumeBullet(rv.educationBulletTwo, "educationBulletTwo", prev)}
-        </ul>
-      </div>
+      ${eduHtml || '<div class="resume-entry"><div class="resume-subtitle">Needs clarification</div></div>'}
     </div>
     <div class="resume-section">
       <div class="resume-section-title">Experience</div>
-      <div class="resume-entry">
-        <div class="resume-entry-header">
-          <span class="resume-org">${renderResumeField(rv.companyName, "companyName", prev)}</span>
-          <span class="resume-dates">${renderResumeField(rv.jobDates, "jobDates", prev)}</span>
-        </div>
-        <div class="resume-subtitle">${renderResumeField(rv.roleTitle, "roleTitle", prev)} — ${renderResumeField(rv.jobLocation, "jobLocation", prev)}</div>
-        <ul class="resume-bullets">
-          ${renderResumeBullet(rv.impactBulletOne, "impactBulletOne", prev)}
-          ${renderResumeBullet(rv.impactBulletTwo, "impactBulletTwo", prev)}
-          ${renderResumeBullet(rv.impactBulletThree, "impactBulletThree", prev)}
-        </ul>
-      </div>
+      ${expHtml || '<div class="resume-entry"><div class="resume-subtitle">Needs clarification</div></div>'}
     </div>
-    <div class="resume-section">
+    ${leaderHtml ? `<div class="resume-section">
       <div class="resume-section-title">Leadership</div>
-      <div class="resume-entry">
-        <div class="resume-entry-header">
-          <span class="resume-org">${renderResumeField(rv.organizationName, "organizationName", prev)}</span>
-          <span class="resume-dates">${renderResumeField(rv.leadershipDates, "leadershipDates", prev)}</span>
-        </div>
-        <div class="resume-subtitle">${renderResumeField(rv.leadershipRole, "leadershipRole", prev)} — ${renderResumeField(rv.leadershipLocation, "leadershipLocation", prev)}</div>
-        <ul class="resume-bullets">
-          ${renderResumeBullet(rv.leadershipBulletOne, "leadershipBulletOne", prev)}
-        </ul>
-      </div>
-    </div>
+      ${leaderHtml}
+    </div>` : ""}
     <div class="resume-section">
       <div class="resume-section-title">Skills & Interests</div>
       <div class="resume-skills">${renderResumeField(rv.skills, "skills", prev)}</div>

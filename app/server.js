@@ -183,37 +183,26 @@ async function handleApi(req, res) {
       const outputFormat = options.outputFormat === "pdf" ? "pdf" : "docx";
 
       const agentResult = await agentGenerateResumeValues(wikiPages);
-      let docxPath;
       let usedAgent = agentResult.usedAgent;
       let resumeValues;
 
-      if (agentResult.usedAgent) {
-        resumeValues = agentResult.values;
-        const outputPath = path.join(core.exportDir, "resume-draft.docx");
-        try {
-          await fsPromises.access(core.defaultDocxTemplatePath);
-          await core.fillDocxTemplate(core.defaultDocxTemplatePath, outputPath, resumeValues);
-          docxPath = outputPath;
-        } catch {
-          docxPath = await core.writeResumeDocx(wikiPages);
-          resumeValues = core.buildDocxTemplateValues(wikiPages);
-          usedAgent = false;
-        }
+      if (agentResult.usedAgent && Array.isArray(agentResult.values.experience)) {
+        resumeValues = core.trimResumeValues(agentResult.values);
       } else {
-        resumeValues = core.buildDocxTemplateValues(wikiPages);
-        docxPath = await core.writeResumeDocx(wikiPages);
+        resumeValues = core.trimResumeValues(core.buildFullResumeValues(wikiPages));
+        usedAgent = false;
       }
+
+      const docxPath = await core.writeResumeDocx(wikiPages, resumeValues);
 
       const prevResumeValues = await readResumeValues(resumeValuesPath);
       await saveResumeValues(resumeValues);
 
       let exportError = null;
-      if (outputFormat === "pdf") {
-        try {
-          await core.convertDocxToPdf(docxPath);
-        } catch (error) {
-          exportError = `DOCX was created, but PDF export failed: ${error.message}`;
-        }
+      try {
+        await core.convertDocxToPdf(docxPath);
+      } catch (error) {
+        exportError = `DOCX was created, but PDF export failed: ${error.message}`;
       }
 
       await core.mergeProjectState({ lastResumeGeneratedAt: core.getIsoNow() });
@@ -261,6 +250,15 @@ function serveStatic(req, res) {
 const server = http.createServer((req, res) => {
   if (req.url.startsWith("/api/")) {
     handleApi(req, res);
+  } else if (req.url.startsWith("/exports/")) {
+    const safeName = path.basename(req.url);
+    const fullPath = path.join(core.exportDir, safeName);
+    if (!fullPath.startsWith(core.exportDir)) { res.writeHead(403); res.end(); return; }
+    const ext = path.extname(safeName);
+    const ct = ext === ".pdf" ? "application/pdf" : ext === ".docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/octet-stream";
+    const stream = fs.createReadStream(fullPath);
+    stream.on("open", () => { res.writeHead(200, { "Content-Type": ct }); stream.pipe(res); });
+    stream.on("error", () => { res.writeHead(404); res.end("Not found"); });
   } else {
     serveStatic(req, res);
   }
