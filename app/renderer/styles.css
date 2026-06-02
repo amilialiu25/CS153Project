@@ -279,6 +279,31 @@ button, input { font: inherit; }
 .file-chip:hover .file-delete-button { opacity: 1; }
 .file-delete-button:hover { background: rgba(243, 139, 168, 0.2); }
 
+.file-chip.previewable .file-name { cursor: pointer; }
+.file-chip.previewable:hover .file-name { color: var(--accent); }
+
+/* Source file preview */
+
+.doc-preview p {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+}
+
+.preview-empty {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.preview-tag {
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 /* Wiki Tree */
 
 .wiki-tree li {

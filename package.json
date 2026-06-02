@@ -5,7 +5,8 @@
   "description": "Local-first AI resume copilot with raw upload, wiki generation, and resume preview.",
   "main": "app/server.js",
   "scripts": {
-    "dev": "node app/server.js"
+    "dev": "node app/server.js",
+    "test": "node --test app/main.test.js"
   },
   "dependencies": {
     "docx": "^9.5.1",
