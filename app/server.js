@@ -105,6 +105,13 @@ async function handleApi(req, res) {
       return sendJson(res, { workflowMode: state.workflowMode });
     }
 
+    if (route === "/api/file-preview" && method === "GET") {
+      await core.ensureProjectDirs();
+      const fileGroup = url.searchParams.get("group");
+      const fileName = url.searchParams.get("name");
+      return sendJson(res, await core.readManagedFileText(fileGroup, fileName));
+    }
+
     if (route === "/api/delete-file" && method === "POST") {
       await core.ensureProjectDirs();
       const { fileGroup, fileName } = JSON.parse(await readBody(req));
@@ -182,6 +189,9 @@ async function handleApi(req, res) {
       const wikiPages = await core.readMarkdownFiles(core.wikiDir);
       const outputFormat = options.outputFormat === "pdf" ? "pdf" : "docx";
 
+      const projectState = await core.readProjectState();
+      const styleProfile = await core.resolveResumeStyleProfile(projectState.workflowMode);
+
       const agentResult = await agentGenerateResumeValues(wikiPages);
       let usedAgent = agentResult.usedAgent;
       let resumeValues;
@@ -193,7 +203,7 @@ async function handleApi(req, res) {
         usedAgent = false;
       }
 
-      const docxPath = await core.writeResumeDocx(wikiPages, resumeValues);
+      const docxPath = await core.writeResumeDocx(wikiPages, resumeValues, styleProfile);
 
       const prevResumeValues = await readResumeValues(resumeValuesPath);
       await saveResumeValues(resumeValues);
@@ -210,6 +220,7 @@ async function handleApi(req, res) {
         exportFiles: await core.listExportFiles(),
         exportError,
         usedAgent,
+        formatSource: styleProfile.source,
         resumeValues,
         prevResumeValues
       });

@@ -11,6 +11,8 @@ const resumeCopilot = {
   getState: () => fetch("/api/state").then((r) => r.json()),
   setWorkflowMode: (workflowMode) => jsonPost("/api/workflow-mode", { workflowMode }),
   deleteFile: (fileGroup, fileName) => jsonPost("/api/delete-file", { fileGroup, fileName }),
+  previewFile: (group, name) =>
+    fetch(`/api/file-preview?group=${encodeURIComponent(group)}&name=${encodeURIComponent(name)}`).then((r) => r.json()),
   uploadFiles: (files) => jsonPost("/api/upload/raw", { files }),
   uploadOriginalResumeFiles: (files) => jsonPost("/api/upload/original", { files }),
   uploadTemplateFiles: (files) => jsonPost("/api/upload/template", { files }),
@@ -753,6 +755,94 @@ function openResumePreview() {
   contentActive.classList.remove("hidden");
 }
 
+/* ─── SOURCE FILE PREVIEW ─── */
+
+const FILE_GROUP_LABELS = {
+  raw: "Raw evidence",
+  originalResume: "Original resume",
+  template: "Template"
+};
+
+function renderPlainTextPreview(text) {
+  const lines = text.split(/\r?\n/);
+  const html = lines
+    .map((line) => (line.trim() ? `<p>${escapeHtml(line)}</p>` : "<br />"))
+    .join("");
+  return `<div class="doc-preview">${html}</div>`;
+}
+
+// Render a parsed resume DOCX with the SAME markup/classes as the generated
+// resume preview, so uploaded resumes and templates look identical to it.
+function buildDocxResumePreviewHtml(parsed) {
+  const sectionsHtml = (parsed.sections || []).map((section) => {
+    let inner;
+    if (section.text) {
+      inner = `<div class="resume-skills">${escapeHtml(section.text)}</div>`;
+    } else {
+      inner = (section.entries || []).map((entry) => {
+        const bullets = (entry.bullets || []).length
+          ? `<ul class="resume-bullets">${entry.bullets.map((b) => `<li>${escapeHtml(b)}</li>`).join("")}</ul>`
+          : "";
+        return `<div class="resume-entry">
+          <div class="resume-entry-header">
+            <span class="resume-org">${escapeHtml(entry.org || "")}</span>
+            <span class="resume-dates">${escapeHtml(entry.dates || "")}</span>
+          </div>
+          ${entry.subtitle ? `<div class="resume-subtitle">${escapeHtml(entry.subtitle)}</div>` : ""}
+          ${bullets}
+        </div>`;
+      }).join("");
+    }
+    return `<div class="resume-section">
+      <div class="resume-section-title">${escapeHtml(section.title)}</div>
+      ${inner}
+    </div>`;
+  }).join("");
+
+  return `<div class="resume-preview">
+    <div class="resume-header">
+      <div class="resume-name">${escapeHtml(parsed.name || "")}</div>
+      <div class="resume-contact">${escapeHtml(parsed.contact || "")}</div>
+    </div>
+    ${sectionsHtml}
+  </div>`;
+}
+
+async function openFilePreview(fileGroup, fileName) {
+  activePageName = null;
+  highlightActiveInTree();
+  contentTitle.textContent = fileName;
+  contentActions.innerHTML = FILE_GROUP_LABELS[fileGroup]
+    ? `<span class="preview-tag">${FILE_GROUP_LABELS[fileGroup]}</span>`
+    : "";
+  contentBody.innerHTML = '<p class="preview-empty">Loading preview…</p>';
+  contentEmpty.classList.add("hidden");
+  contentActive.classList.remove("hidden");
+
+  try {
+    const res = await resumeCopilot.previewFile(fileGroup, fileName);
+    if (res.error) {
+      contentBody.innerHTML = `<p class="preview-empty">${escapeHtml(res.error)}</p>`;
+      return;
+    }
+    if (!res.isText) {
+      contentBody.innerHTML = '<p class="preview-empty">No text preview is available for this file type.</p>';
+      return;
+    }
+    // A parsed DOCX resume renders with the structured resume-card layout (same
+    // as the generated resume). Markdown renders as Markdown; other text as-is.
+    if (res.resume && Array.isArray(res.resume.sections) && res.resume.sections.length) {
+      contentBody.innerHTML = buildDocxResumePreviewHtml(res.resume);
+    } else if (fileName.toLowerCase().endsWith(".md")) {
+      contentBody.innerHTML = markdownToHtml(res.text);
+    } else {
+      contentBody.innerHTML = renderPlainTextPreview(res.text);
+    }
+  } catch {
+    contentBody.innerHTML = '<p class="preview-empty">Failed to load preview.</p>';
+  }
+}
+
 /* ─── PAGE PREVIEW ─── */
 
 function openPagePreview(fileName) {
@@ -808,6 +898,12 @@ function renderFileList(container, files, emptyMessage, fileGroup = null) {
     const name = document.createElement("span");
     name.className = "file-name";
     name.textContent = file;
+
+    if (["raw", "originalResume", "template"].includes(fileGroup)) {
+      item.classList.add("previewable");
+      name.title = "Click to preview";
+      name.addEventListener("click", () => openFilePreview(fileGroup, file));
+    }
 
     const deleteButton = document.createElement("button");
     deleteButton.className = "file-delete-button";

@@ -131,10 +131,33 @@ new evidence.
 
 - Only state facts grounded in the wiki. Never invent claims.
 - Use action-verb bullets with metrics when available.
-- Default to a conservative ATS-friendly single-column layout.
 - Templates live in `ai-resume/templates/`.
 - Exports go to `ai-resume/exports/`.
 - Prefer DOCX export; PDF via LibreOffice or Word when available.
+
+### Resume formatting (style profiles)
+
+Resume *content* always comes from the wiki; resume *format* is chosen
+separately by resolving a "style profile" (fonts, sizes, section order/labels,
+bullet glyph, margins, name styling) from the most specific available source.
+The profile is extracted from a DOCX and the wiki content is re-rendered through
+it, so the output adopts the source's look without copying its content.
+
+Precedence (`resolveResumeStyleProfile` in `app/main.js`):
+
+1. **User-uploaded template** in `ai-resume/templates/` (any `.docx` other than
+   `default-ats.docx`) — always wins, in either workflow mode.
+2. **Original resume** in `ai-resume/original/` — used only in
+   "improve existing resume" mode, to preserve the user's own format.
+3. **Default** — the built-in single-column ATS layout.
+
+This covers the two situations: (A) build-from-scratch uses an uploaded template
+if given, else the default; (B) improve-existing preserves the original resume's
+format unless an uploaded template overrides it.
+
+Fidelity note: profiles reproduce fonts, sizes, section headings/order, bullet
+style, and margins. They do **not** reproduce multi-column layouts, tables,
+logos, or images from the source DOCX.
 
 ## Web UI
 
