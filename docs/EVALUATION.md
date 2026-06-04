@@ -164,7 +164,37 @@ changed fields, added bullets, and removed bullets are color-coded. This is a fo
 evaluation surfaced *to the user*: it makes every change the system made auditable,
 so the user can confirm nothing was silently dropped or fabricated before exporting.
 
-## 8. Reproducing these results
+## 8. User feedback
+
+The TA review suggested gathering live feedback from peers. An early hands-on review
+from a peer tester (lightly edited for clarity) validated the core design and surfaced
+a use case beyond resumes:
+
+> "It's not only a resume copilot — even if you never generate a resume, it works as a
+> compounding personal knowledge base. For people who don't want to hand-build an LLM
+> wiki, it sets the wiki up and maintains it for you automatically, without ever
+> opening a Claude Code session yourself.
+>
+> Because the resume is built from your own evidence, it feels trustworthy. The diff
+> mode is the highlight — you can see exactly how the AI changed your resume and what
+> it added. 'Build from scratch with a template' is a big time-saver for a first
+> resume, and being able to re-skin an existing resume with an uploaded template saves
+> a lot of time too."
+
+What this validates, mapped to the project's claims:
+
+| Feedback | Claim it supports |
+| --- | --- |
+| "compounding personal knowledge base… sets the wiki up for you" | The wiki has standalone value; automation lowers the barrier vs. hand-running an LLM wiki |
+| "built from your own evidence… feels trustworthy" | Grounding (§2) is perceptible to users, not just an internal guarantee |
+| "diff mode… see exactly how the AI changed your resume" | The diff view (§7) works as user-facing, auditable evaluation |
+| "template… big time-saver" | Format preservation / template re-skinning (§3) delivers the intended efficiency |
+
+This is a small-N qualitative signal, not a benchmark, but it confirms that the two
+features we considered most differentiating — evidence-grounding and the diff view —
+land with a first-time user.
+
+## 9. Reproducing these results
 
 ```bash
 npm install
@@ -176,15 +206,34 @@ npm run dev         # http://localhost:3000 — then walk scenarios A–D from t
 No API keys or network access are required for the tests or the heuristic path. The
 AI path additionally requires a local Claude CLI on `PATH`.
 
-## 9. Summary of limitations
+## 10. Failure modes and how they surface
+
+The system is designed so that when something goes wrong, the user *sees* it rather
+than receiving a silently-wrong resume. Each known failure mode, its trigger, how it
+is surfaced or handled, and the mitigation:
+
+| Failure mode | Trigger | How it's surfaced / handled | Mitigation |
+| --- | --- | --- | --- |
+| Missing evidence for a field | Sources lack a name, metric, or date | Field rendered as visible `Needs clarification` text (§2) | User adds evidence or edits the export |
+| Ambiguous / incomplete evidence | A claim sounds strong but lacks a metric or date | Marked `Needs verification` and logged on the `open-questions.md` wiki page | User fills the gap and regenerates |
+| Incomplete AI wiki | Model omits one of the ten required pages | Detected, logged, and the pipeline **falls back to the heuristic builder** (§5) | Deterministic wiki still produced |
+| Malformed AI output | Model wraps/embeds non-JSON output | `parseAgentJson` strips fences / extracts the object; on total failure, heuristic fallback (§5) | No crash; degraded but functional |
+| No AI installed | Claude CLI not on `PATH` | Heuristic path runs end-to-end (§5) | App fully usable without AI |
+| AI timeout | Generation exceeds 120s (resume) / 300s (wiki) | Process killed; pipeline falls back to the heuristic builder (§5) | Output still produced from evidence |
+| Complex source layout lost | Source DOCX uses columns / tables / images | Output is single-column; documented *fidelity note* (§3) | Upload a template, or accept the ATS layout |
+| One-page overflow | Line estimate (~100 chars/line) under-counts | Priority-ordered trimming runs; the estimate may be slightly off (§4) | Estimate is conservative; user can edit |
+
+The throughline: **no failure mode produces a confident, unsourced claim** — it either
+degrades to the deterministic path or shows a visible placeholder.
+
+### Residual limitations
 
 - **Format fidelity** is limited to fonts, sizes, headings/order, bullets, and
   margins — not multi-column layouts, tables, or images (§3).
-- **Line estimation** is a heuristic (chars-per-line), not a true text-layout
-  measurement, so the one-page guarantee is a close approximation rather than a
-  pixel-exact promise (§4).
+- **Line estimation** is a heuristic, not a true text-layout measurement, so the
+  one-page guarantee is a close approximation rather than a pixel-exact promise (§4).
 - **AI output quality** depends on the local model and the richness of the uploaded
   evidence; thin evidence yields more `Needs clarification` placeholders by design.
 - The automated suite covers the deterministic core (formatting, parsing,
-  precedence); the AI generation path is validated manually via the E2E matrix rather
-  than with mocked model responses.
+  precedence); the AI generation path is validated manually via the E2E matrix and the
+  user feedback above, rather than with mocked model responses.

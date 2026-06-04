@@ -11,10 +11,20 @@ material (project notes, work samples, an existing resume). It distills that
 material into a structured, interlinked **personal wiki**, then generates a
 resume from the wiki so each claim traces back to a source.
 
-It follows the **LLM Wiki pattern**: a human curates the sources and asks
-questions, while the AI maintains an interlinked knowledge base in `wiki/` that
-compounds over time. Resume generation reads from the wiki, never directly from
-the raw files.
+It follows the **LLM Wiki pattern** (inspired by Andrej Karpathy's idea of using
+an LLM-maintained knowledge base): a human curates the sources and asks questions,
+while the AI maintains an interlinked knowledge base in `wiki/` that compounds over
+time. Resume generation reads from the wiki, never directly from the raw files.
+
+**Why a wiki instead of one-shot generation?** Asking a model to write a resume
+directly from raw files in a single prompt gives you no audit trail, re-reads
+everything on every change, and invites the model to fill gaps with invented detail.
+A persistent wiki separates *extraction* from *rendering*: facts are captured once,
+cited to their source, and reused across resume versions — so updates are
+incremental, every claim is traceable, and gaps surface as open questions instead of
+fabrications. The wiki is also useful on its own as a compounding personal knowledge
+base, even if you never export a resume. (A peer reviewer independently highlighted
+this standalone use — see [docs/EVALUATION.md](docs/EVALUATION.md#8-user-feedback).)
 
 **Key capabilities**
 
@@ -127,8 +137,14 @@ limits are documented honestly. Highlights:
 - **A documented end-to-end scenario matrix** (`test/`) with distinct fixtures that
   make the resolved format obvious, plus a built-in **diff view** that lets users
   audit exactly what changed between resume versions.
+- **Early user feedback** from a peer tester — who flagged the evidence-grounding and
+  diff view as the standout features, and the wiki as useful on its own.
 
-Full methodology, results, comparisons, and known failure modes are in
+> "Because the resume is built from your own evidence, it feels trustworthy. The diff
+> mode is the highlight — you can see exactly how the AI changed your resume and what
+> it added." — peer reviewer ([full feedback](docs/EVALUATION.md#8-user-feedback))
+
+Full methodology, results, comparisons, failure modes, and user feedback are in
 **[docs/EVALUATION.md](docs/EVALUATION.md)**.
 
 ## AI usage disclosure
@@ -153,9 +169,10 @@ itself uses AI at runtime:
 
 ## Citations and acknowledgements
 
-- **LLM Wiki pattern** — the interlinked, AI-maintained knowledge-base approach
-  is inspired by Andrej Karpathy's writing on using LLMs as personal knowledge
-  tools.
+- **LLM Wiki pattern** — the interlinked, AI-maintained knowledge-base approach is
+  inspired by Andrej Karpathy's posts on using an LLM as a personal knowledge base
+  (an "LLM wiki" that the model maintains and you query), adapted here to the
+  specific domain of resume building.
 - **Anthropic Claude / Claude Code** — used for development and optional runtime
   generation.
 - **Open-source libraries** — [`docx`](https://github.com/dolanmiu/docx) and
