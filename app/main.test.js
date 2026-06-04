@@ -160,6 +160,24 @@ test("parseResumeDocx handles a template with a Projects section", async () => {
   assert.equal(projects.entries[0].dates, "Year");
 });
 
+test("resumeValuesFromParsedResume maps a parsed resume into diff-baseline shape", async () => {
+  const parsed = await core.parseResumeDocx(path.join(__dirname, "..", "test", "original-resume", "alex-carter-resume.docx"));
+  const values = core.resumeValuesFromParsedResume(parsed);
+
+  assert.equal(values.candidateName, "ALEX CARTER");
+  assert.equal(values.education[0].schoolName, "University of California, Berkeley");
+  assert.equal(values.experience.length, 2);
+  assert.equal(values.experience[0].companyName, "Campus Tech Collective");
+  assert.ok(values.experience[0].bullets.length > 0, "experience entries carry their bullets for diffing");
+  assert.match(values.skills, /Java/);
+  // The original resume has no leadership section.
+  assert.deepEqual(values.leadership, []);
+});
+
+test("resumeValuesFromParsedResume returns null for null input", () => {
+  assert.equal(core.resumeValuesFromParsedResume(null), null);
+});
+
 test("custom section ordering is honored by the builder", async () => {
   const reordered = {
     ...core.getDefaultStyleProfile(),

@@ -21,6 +21,22 @@ async function saveResumeValues(values) {
   await fsPromises.writeFile(resumeValuesPath, JSON.stringify(values, null, 2));
 }
 
+// The baseline the resume preview diffs against:
+//  - "improve existing resume" mode -> the original uploaded resume, so the diff
+//    shows what changed versus the resume the user started from
+//  - otherwise -> the previous generation (resume-values-prev.json)
+async function computeDiffBaseline(workflowMode) {
+  if (workflowMode === core.workflowModes.improveExistingResume) {
+    const originalPath = await core.getPrimaryOriginalResumeDocxPath();
+    if (originalPath) {
+      const parsed = await core.parseResumeDocx(originalPath);
+      const baseline = core.resumeValuesFromParsedResume(parsed);
+      if (baseline) return baseline;
+    }
+  }
+  return readResumeValues(resumeValuesPrevPath);
+}
+
 const MIME_TYPES = {
   ".html": "text/html",
   ".css": "text/css",
@@ -61,7 +77,7 @@ async function handleApi(req, res) {
   try {
     if (route === "/api/state" && method === "GET") {
       await core.ensureProjectDirs();
-      const [projectState, rawFiles, originalResumeFiles, templateFiles, exportFiles, wikiPages, agentStatus, resumeValues, prevResumeValues] = await Promise.all([
+      const [projectState, rawFiles, originalResumeFiles, templateFiles, exportFiles, wikiPages, agentStatus, resumeValues] = await Promise.all([
         core.readProjectState(),
         core.listRawFiles(),
         core.listOriginalResumeFiles(),
@@ -69,9 +85,9 @@ async function handleApi(req, res) {
         core.listExportFiles(),
         core.readMarkdownFiles(core.wikiDir),
         detectClaude(),
-        readResumeValues(resumeValuesPath),
-        readResumeValues(resumeValuesPrevPath)
+        readResumeValues(resumeValuesPath)
       ]);
+      const prevResumeValues = await computeDiffBaseline(projectState.workflowMode);
 
       return sendJson(res, {
         workflowMode: projectState.workflowMode,
@@ -205,8 +221,8 @@ async function handleApi(req, res) {
 
       const docxPath = await core.writeResumeDocx(wikiPages, resumeValues, styleProfile);
 
-      const prevResumeValues = await readResumeValues(resumeValuesPath);
       await saveResumeValues(resumeValues);
+      const prevResumeValues = await computeDiffBaseline(projectState.workflowMode);
 
       let exportError = null;
       try {

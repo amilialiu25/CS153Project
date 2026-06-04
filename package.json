@@ -6,7 +6,8 @@
   "main": "app/server.js",
   "scripts": {
     "dev": "node app/server.js",
-    "test": "node --test app/main.test.js"
+    "test": "node --test app/main.test.js",
+    "clean": "node scripts/clean-workspace.js"
   },
   "dependencies": {
     "docx": "^9.5.1",

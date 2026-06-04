@@ -1,5 +1,10 @@
 # Software Engineering Intern — Plaid (Summer 2025)
 
+**Company:** Plaid
+**Role:** Software Engineering Intern
+**Location:** San Francisco, CA
+**Dates:** June 2025 – August 2025
+
 Worked on the payments reliability team building backend services in Go and TypeScript.
 
 - Designed and shipped a webhook retry pipeline that reduced failed payment notifications by 38%, processing 2.4M events per day.
