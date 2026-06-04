@@ -133,11 +133,10 @@ Full methodology, results, comparisons, and known failure modes are in
 
 ## AI usage disclosure
 
-This project was built with substantial AI assistance, and the application
+This project was built with AI assistance, and the application
 itself uses AI at runtime:
 
-- **Development.** The overall product concept, workflow, and architecture are the
-  author's own — the wiki-first pipeline (`raw → wiki → resume`), the two workflow
+- **Development.** The overall product concept, workflow, and architecture are my own — the wiki-first pipeline (`raw → wiki → resume`), the two workflow
   modes, and the style-profile approach to format preservation were designed by the
   author. The implementation (application code, tests, and documentation) was then
   written collaboratively with **Anthropic's Claude** (via Claude Code); many commits
