@@ -11,6 +11,8 @@ const resumeCopilot = {
   getState: () => fetch("/api/state").then((r) => r.json()),
   setWorkflowMode: (workflowMode) => jsonPost("/api/workflow-mode", { workflowMode }),
   deleteFile: (fileGroup, fileName) => jsonPost("/api/delete-file", { fileGroup, fileName }),
+  previewFile: (group, name) =>
+    fetch(`/api/file-preview?group=${encodeURIComponent(group)}&name=${encodeURIComponent(name)}`).then((r) => r.json()),
   uploadFiles: (files) => jsonPost("/api/upload/raw", { files }),
   uploadOriginalResumeFiles: (files) => jsonPost("/api/upload/original", { files }),
   uploadTemplateFiles: (files) => jsonPost("/api/upload/template", { files }),
@@ -46,6 +48,7 @@ const contentActive = document.querySelector("#contentActive");
 const contentTitle = document.querySelector("#contentTitle");
 const contentBody = document.querySelector("#contentBody");
 const resizeHandle = document.querySelector("#resizeHandle");
+const contentActions = document.querySelector("#contentActions");
 
 /* ─── STATE ─── */
 
@@ -196,6 +199,13 @@ class GraphEngine {
     this.scale = 1;
     this.offsetX = 0;
     this.offsetY = 0;
+    this._fitDone = false;
+    setTimeout(() => {
+      if (this._fitDone) return;
+      for (let i = 0; i < 300; i++) this._simulate();
+      this._fitDone = true;
+      this._autoFit();
+    }, 500);
     this.start();
   }
 
@@ -214,10 +224,9 @@ class GraphEngine {
   }
 
   reset() {
-    this.scale = 1;
-    this.offsetX = 0;
-    this.offsetY = 0;
-    if (this.nodes.length && currentWikiPages.length) {
+    if (this.nodes.length) {
+      this._autoFit();
+    } else if (currentWikiPages.length) {
       this.setData(currentWikiPages);
     }
   }
@@ -228,10 +237,29 @@ class GraphEngine {
     this.animFrame = requestAnimationFrame(this._tick);
   }
 
+  _autoFit() {
+    if (!this.nodes.length) return;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const n of this.nodes) {
+      minX = Math.min(minX, n.x);
+      minY = Math.min(minY, n.y);
+      maxX = Math.max(maxX, n.x);
+      maxY = Math.max(maxY, n.y);
+    }
+    const pad = 60;
+    const bw = (maxX - minX) + pad * 2;
+    const bh = (maxY - minY) + pad * 2;
+    const bcx = (minX + maxX) / 2;
+    const bcy = (minY + maxY) / 2;
+    this.scale = Math.min(this.width / bw, this.height / bh);
+    this.offsetX = this.width / 2 - bcx * this.scale;
+    this.offsetY = this.height / 2 - bcy * this.scale;
+  }
+
   _simulate() {
-    const repulsion = 700;
-    const attraction = 0.008;
-    const centerPull = 0.012;
+    const repulsion = 120;
+    const attraction = 0.015;
+    const centerPull = 0.03;
     const cx = this.width / 2;
     const cy = this.height / 2;
 
@@ -572,6 +600,249 @@ function markdownToHtml(content) {
   return blocks.join("");
 }
 
+/* ─── RESUME PREVIEW ─── */
+
+let currentResumeValues = null;
+let prevResumeValues = null;
+let showDiff = false;
+
+function renderResumeField(value, field, prev) {
+  if (!value || value === "Needs clarification") return "";
+  const changed = showDiff && prev && prev[field] && prev[field] !== value;
+  if (changed) {
+    return `<div class="diff-changed"><div class="diff-old">${escapeHtml(prev[field])}</div>${escapeHtml(value)}</div>`;
+  }
+  return escapeHtml(value);
+}
+
+function renderResumeBullet(value, field, prev) {
+  if (!value || value === "Needs clarification") return "";
+  const text = renderResumeField(value, field, prev);
+  return `<li>${text}</li>`;
+}
+
+function findPrevEntry(prevArr, orgKey, orgName) {
+  if (!prevArr || !Array.isArray(prevArr)) return null;
+  return prevArr.find(e => e[orgKey] === orgName) || null;
+}
+
+function renderEntryHtml(entry, orgKey, roleKey, locationKey, datesKey, prevEntry, isNew) {
+  const org = entry[orgKey] || "";
+  const role = entry[roleKey] || "";
+  const loc = entry[locationKey] || "";
+  const dates = entry[datesKey] || "";
+  const bullets = Array.isArray(entry.bullets) ? entry.bullets : [];
+  const prevBullets = prevEntry && Array.isArray(prevEntry.bullets) ? prevEntry.bullets : [];
+  const subtitle = [role, loc].filter(Boolean).join(" — ");
+
+  const entryClass = isNew ? "resume-entry diff-new" : "resume-entry";
+
+  let bulletsHtml = "";
+  if (bullets.length) {
+    const items = bullets.map(b => {
+      const existed = prevBullets.some(pb => pb === b);
+      if (!isNew && !existed && showDiff) {
+        return `<li class="diff-new">${escapeHtml(b)}</li>`;
+      }
+      return `<li>${escapeHtml(b)}</li>`;
+    });
+    if (showDiff && prevEntry) {
+      const removed = prevBullets.filter(pb => !bullets.includes(pb));
+      for (const rb of removed) {
+        items.push(`<li class="diff-removed">${escapeHtml(rb)}</li>`);
+      }
+    }
+    bulletsHtml = `<ul class="resume-bullets">${items.join("")}</ul>`;
+  }
+
+  return `<div class="${entryClass}">
+    <div class="resume-entry-header">
+      <span class="resume-org">${escapeHtml(org)}</span>
+      <span class="resume-dates">${escapeHtml(dates)}</span>
+    </div>
+    ${subtitle ? `<div class="resume-subtitle">${escapeHtml(subtitle)}</div>` : ""}
+    ${bulletsHtml}
+  </div>`;
+}
+
+function renderSectionHtml(entries, orgKey, roleKey, locationKey, datesKey, prevEntries) {
+  let html = "";
+  for (const entry of entries) {
+    const prevEntry = showDiff ? findPrevEntry(prevEntries, orgKey, entry[orgKey]) : null;
+    const isNew = showDiff && prevEntries && Array.isArray(prevEntries) && !prevEntry;
+    html += renderEntryHtml(entry, orgKey, roleKey, locationKey, datesKey, prevEntry, isNew);
+  }
+  if (showDiff && prevEntries && Array.isArray(prevEntries)) {
+    for (const pe of prevEntries) {
+      const stillExists = entries.some(e => e[orgKey] === pe[orgKey]);
+      if (!stillExists) {
+        html += `<div class="resume-entry diff-removed">
+          <div class="resume-entry-header"><span class="resume-org">${escapeHtml(pe[orgKey] || "")}</span></div>
+        </div>`;
+      }
+    }
+  }
+  return html;
+}
+
+function buildResumePreviewHtml(rv, prev) {
+  const contact = [rv.phone, rv.email, rv.location].filter(v => v && v !== "Needs clarification").join(" | ");
+
+  const eduEntries = Array.isArray(rv.education) ? rv.education : [];
+  const expEntries = Array.isArray(rv.experience) ? rv.experience : [];
+  const leaderEntries = Array.isArray(rv.leadership) ? rv.leadership : [];
+
+  const prevEdu = prev && Array.isArray(prev.education) ? prev.education : null;
+  const prevExp = prev && Array.isArray(prev.experience) ? prev.experience : null;
+  const prevLeader = prev && Array.isArray(prev.leadership) ? prev.leadership : null;
+
+  const eduHtml = renderSectionHtml(eduEntries, "schoolName", "degree", "schoolLocation", "dates", prevEdu);
+  const expHtml = renderSectionHtml(expEntries, "companyName", "roleTitle", "location", "dates", prevExp);
+  const leaderHtml = renderSectionHtml(leaderEntries, "organizationName", "role", "location", "dates", prevLeader);
+
+  return `<div class="resume-preview">
+    <div class="resume-header">
+      <div class="resume-name">${renderResumeField(rv.candidateName, "candidateName", prev)}</div>
+      <div class="resume-contact">${renderResumeField(contact, "_contact", null)}</div>
+    </div>
+    <div class="resume-section">
+      <div class="resume-section-title">Education</div>
+      ${eduHtml || '<div class="resume-entry"><div class="resume-subtitle">Needs clarification</div></div>'}
+    </div>
+    <div class="resume-section">
+      <div class="resume-section-title">Experience</div>
+      ${expHtml || '<div class="resume-entry"><div class="resume-subtitle">Needs clarification</div></div>'}
+    </div>
+    ${leaderHtml ? `<div class="resume-section">
+      <div class="resume-section-title">Leadership</div>
+      ${leaderHtml}
+    </div>` : ""}
+    <div class="resume-section">
+      <div class="resume-section-title">Skills & Interests</div>
+      <div class="resume-skills">${renderResumeField(rv.skills, "skills", prev)}</div>
+      ${rv.interests && rv.interests !== "Needs clarification" ? `<div class="resume-skills" style="margin-top:4px">${renderResumeField(rv.interests, "interests", prev)}</div>` : ""}
+    </div>
+  </div>`;
+}
+
+function openResumePreview() {
+  if (!currentResumeValues) return;
+
+  activePageName = null;
+  highlightActiveInTree();
+  contentTitle.textContent = "Resume Preview";
+
+  const diffBtn = prevResumeValues
+    ? `<button id="diffToggleBtn" class="diff-toggle${showDiff ? " active" : ""}">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V4M4 12h16"/></svg>
+        ${showDiff ? "Hide Changes" : "Show Changes"}
+       </button>`
+    : "";
+
+  contentBody.innerHTML = buildResumePreviewHtml(currentResumeValues, showDiff ? prevResumeValues : null);
+
+  contentActions.innerHTML = diffBtn;
+
+  const toggleBtn = contentActions.querySelector("#diffToggleBtn");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", () => {
+      showDiff = !showDiff;
+      openResumePreview();
+    });
+  }
+
+  contentEmpty.classList.add("hidden");
+  contentActive.classList.remove("hidden");
+}
+
+/* ─── SOURCE FILE PREVIEW ─── */
+
+const FILE_GROUP_LABELS = {
+  raw: "Raw evidence",
+  originalResume: "Original resume",
+  template: "Template"
+};
+
+function renderPlainTextPreview(text) {
+  const lines = text.split(/\r?\n/);
+  const html = lines
+    .map((line) => (line.trim() ? `<p>${escapeHtml(line)}</p>` : "<br />"))
+    .join("");
+  return `<div class="doc-preview">${html}</div>`;
+}
+
+// Render a parsed resume DOCX with the SAME markup/classes as the generated
+// resume preview, so uploaded resumes and templates look identical to it.
+function buildDocxResumePreviewHtml(parsed) {
+  const sectionsHtml = (parsed.sections || []).map((section) => {
+    let inner;
+    if (section.text) {
+      inner = `<div class="resume-skills">${escapeHtml(section.text)}</div>`;
+    } else {
+      inner = (section.entries || []).map((entry) => {
+        const bullets = (entry.bullets || []).length
+          ? `<ul class="resume-bullets">${entry.bullets.map((b) => `<li>${escapeHtml(b)}</li>`).join("")}</ul>`
+          : "";
+        return `<div class="resume-entry">
+          <div class="resume-entry-header">
+            <span class="resume-org">${escapeHtml(entry.org || "")}</span>
+            <span class="resume-dates">${escapeHtml(entry.dates || "")}</span>
+          </div>
+          ${entry.subtitle ? `<div class="resume-subtitle">${escapeHtml(entry.subtitle)}</div>` : ""}
+          ${bullets}
+        </div>`;
+      }).join("");
+    }
+    return `<div class="resume-section">
+      <div class="resume-section-title">${escapeHtml(section.title)}</div>
+      ${inner}
+    </div>`;
+  }).join("");
+
+  return `<div class="resume-preview">
+    <div class="resume-header">
+      <div class="resume-name">${escapeHtml(parsed.name || "")}</div>
+      <div class="resume-contact">${escapeHtml(parsed.contact || "")}</div>
+    </div>
+    ${sectionsHtml}
+  </div>`;
+}
+
+async function openFilePreview(fileGroup, fileName) {
+  activePageName = null;
+  highlightActiveInTree();
+  contentTitle.textContent = fileName;
+  contentActions.innerHTML = FILE_GROUP_LABELS[fileGroup]
+    ? `<span class="preview-tag">${FILE_GROUP_LABELS[fileGroup]}</span>`
+    : "";
+  contentBody.innerHTML = '<p class="preview-empty">Loading preview…</p>';
+  contentEmpty.classList.add("hidden");
+  contentActive.classList.remove("hidden");
+
+  try {
+    const res = await resumeCopilot.previewFile(fileGroup, fileName);
+    if (res.error) {
+      contentBody.innerHTML = `<p class="preview-empty">${escapeHtml(res.error)}</p>`;
+      return;
+    }
+    if (!res.isText) {
+      contentBody.innerHTML = '<p class="preview-empty">No text preview is available for this file type.</p>';
+      return;
+    }
+    // A parsed DOCX resume renders with the structured resume-card layout (same
+    // as the generated resume). Markdown renders as Markdown; other text as-is.
+    if (res.resume && Array.isArray(res.resume.sections) && res.resume.sections.length) {
+      contentBody.innerHTML = buildDocxResumePreviewHtml(res.resume);
+    } else if (fileName.toLowerCase().endsWith(".md")) {
+      contentBody.innerHTML = markdownToHtml(res.text);
+    } else {
+      contentBody.innerHTML = renderPlainTextPreview(res.text);
+    }
+  } catch {
+    contentBody.innerHTML = '<p class="preview-empty">Failed to load preview.</p>';
+  }
+}
+
 /* ─── PAGE PREVIEW ─── */
 
 function openPagePreview(fileName) {
@@ -581,6 +852,7 @@ function openPagePreview(fileName) {
   activePageName = fileName;
   contentTitle.textContent = fileName.replace(/\.md$/, "");
   contentBody.innerHTML = markdownToHtml(page.content);
+  contentActions.innerHTML = "";
 
   contentBody.querySelectorAll(".wiki-link").forEach((link) => {
     link.addEventListener("click", () => {
@@ -626,6 +898,12 @@ function renderFileList(container, files, emptyMessage, fileGroup = null) {
     const name = document.createElement("span");
     name.className = "file-name";
     name.textContent = file;
+
+    if (["raw", "originalResume", "template"].includes(fileGroup)) {
+      item.classList.add("previewable");
+      name.title = "Click to preview";
+      name.addEventListener("click", () => openFilePreview(fileGroup, file));
+    }
 
     const deleteButton = document.createElement("button");
     deleteButton.className = "file-delete-button";
@@ -733,8 +1011,19 @@ async function refreshState() {
   renderFileList(templateList, state.templateFiles, "No templates", "template");
   renderFileList(exportList, state.exportFiles, "No exports yet", "export");
 
+  exportList.querySelectorAll(".file-chip").forEach((chip) => {
+    chip.style.cursor = "pointer";
+    chip.addEventListener("click", (e) => {
+      if (e.target.closest(".file-delete-button")) return;
+      if (currentResumeValues) openResumePreview();
+    });
+  });
+
   currentWikiPages = state.wikiPages || [];
   renderWikiFileTree(currentWikiPages);
+
+  if (state.resumeValues) currentResumeValues = state.resumeValues;
+  if (state.prevResumeValues) prevResumeValues = state.prevResumeValues;
 
   if (currentWikiPages.length > 0) {
     graphEmptyState.classList.add("hidden");
@@ -815,11 +1104,17 @@ generateResumeButton.addEventListener("click", async () => {
   try {
     const outputFormat = outputFormatInputs.find((input) => input.checked)?.value ?? "docx";
     const result = await resumeCopilot.generateResume({ outputFormat });
+    if (result?.resumeValues) {
+      prevResumeValues = result.prevResumeValues || prevResumeValues;
+      currentResumeValues = result.resumeValues;
+      showDiff = !!prevResumeValues;
+    }
     await refreshState();
     if (result?.exportError) {
       resumeStatusBadge.textContent = "Export error";
       resumeStatusBadge.dataset.state = "warning";
     }
+    if (currentResumeValues) openResumePreview();
   } finally {
     resumeLoadingOverlay.classList.add("hidden");
     generateResumeButton.disabled = false;
