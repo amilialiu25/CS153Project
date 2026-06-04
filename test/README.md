@@ -19,6 +19,7 @@ test/
     modern-template.docx           # modern sans: Arial, Title-Case borderless
                                     # headings (navy), 0.5in margins
   raw/
+    candidate-profile.md           # name, contact, summary, education
     backend-internship.md          # NEW: Plaid SWE internship (metrics-heavy)
     ml-research-project.md         # NEW: BAIR research assistant
     open-source-contribution.md    # NEW: Apache Arrow contributions

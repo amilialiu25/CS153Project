@@ -27,7 +27,9 @@ const projectStatePath = path.join(projectRoot, ".resume-copilot-state.json");
 const hiddenAppFiles = new Set(["README.md", ".DS_Store"]);
 const hiddenWikiPages = new Set(["README.md", "change-notes.md"]);
 const hiddenOriginalResumeFiles = new Set(["README.md"]);
-const hiddenTemplateFiles = new Set(["README.md"]);
+// default-ats.docx is the built-in fallback template, not a user upload — hide it
+// from the template list so it can't be deleted through the UI.
+const hiddenTemplateFiles = new Set(["README.md", "default-ats.docx"]);
 const hiddenExportFiles = new Set(["README.md"]);
 const workflowModes = {
   buildFromScratch: "build-from-scratch",
@@ -1725,6 +1727,61 @@ async function parseResumeDocx(filePath) {
   }
 }
 
+// Convert a parsed resume DOCX into the resume-values shape used by the resume
+// preview/diff, so an uploaded original resume can serve as the diff baseline
+// in "improve existing resume" mode. Only the fields the diff reads are mapped
+// (name, per-section org names + bullets, and skills).
+function resumeValuesFromParsedResume(parsed) {
+  if (!parsed) return null;
+
+  const values = {
+    candidateName: parsed.name || "",
+    phone: "",
+    email: "",
+    location: "",
+    education: [],
+    experience: [],
+    leadership: [],
+    skills: "",
+    interests: ""
+  };
+
+  for (const section of parsed.sections || []) {
+    const key = section.key || normalizeSectionKey(section.title);
+    const entries = section.entries || [];
+
+    if (key === "education") {
+      values.education = entries.map((e) => ({
+        schoolName: e.org || "",
+        degree: e.subtitle || "",
+        schoolLocation: "",
+        dates: e.dates || "",
+        bullets: e.bullets || []
+      }));
+    } else if (key === "experience") {
+      values.experience = entries.map((e) => ({
+        companyName: e.org || "",
+        roleTitle: e.subtitle || "",
+        location: "",
+        dates: e.dates || "",
+        bullets: e.bullets || []
+      }));
+    } else if (key === "leadership") {
+      values.leadership = entries.map((e) => ({
+        organizationName: e.org || "",
+        role: e.subtitle || "",
+        location: "",
+        dates: e.dates || "",
+        bullets: e.bullets || []
+      }));
+    } else if (key === "skills" && section.text) {
+      values.skills = values.skills ? `${values.skills} ${section.text}` : section.text;
+    }
+  }
+
+  return values;
+}
+
 // Read a DOCX (uploaded template or original resume) and derive a style profile
 // from it, falling back to the default profile for anything not detected.
 async function extractDocxStyleProfile(filePath, source = "template") {
@@ -2423,6 +2480,7 @@ module.exports = {
   getDefaultStyleProfile,
   extractDocxStyleProfile,
   parseResumeDocx,
+  resumeValuesFromParsedResume,
   resolveResumeStyleProfile,
   getPrimaryOriginalResumeDocxPath,
   getPrimaryUserTemplateDocxPath,

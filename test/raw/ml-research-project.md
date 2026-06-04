@@ -1,5 +1,10 @@
 # Undergraduate Research Assistant — Berkeley AI Research (BAIR)
 
+**Organization:** Berkeley AI Research (BAIR)
+**Role:** Undergraduate Research Assistant
+**Location:** Berkeley, CA
+**Dates:** September 2024 – Present
+
 Researched retrieval-augmented generation for long-document question answering under Prof. Dawn Song.
 
 - Built a PyTorch pipeline that improved answer accuracy on a 50k-document benchmark by 14% over the baseline.
