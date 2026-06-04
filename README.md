@@ -136,9 +136,12 @@ Full methodology, results, comparisons, and known failure modes are in
 This project was built with substantial AI assistance, and the application
 itself uses AI at runtime:
 
-- **Development.** The application code, tests, and documentation were written
-  collaboratively with **Anthropic's Claude** (via Claude Code). Many commits are
-  co-authored by Claude (see the `Co-Authored-By:` trailers in the git history).
+- **Development.** The overall product concept, workflow, and architecture are the
+  author's own — the wiki-first pipeline (`raw → wiki → resume`), the two workflow
+  modes, and the style-profile approach to format preservation were designed by the
+  author. The implementation (application code, tests, and documentation) was then
+  written collaboratively with **Anthropic's Claude** (via Claude Code); many commits
+  are co-authored by Claude (see the `Co-Authored-By:` trailers in the git history).
 - **Runtime.** When the **Claude CLI** is installed, the app passes your evidence
   and wiki to it to generate the wiki pages and resume content. When it is not
   installed, generation falls back to deterministic, non-AI heuristics in
@@ -172,8 +175,7 @@ itself uses AI at runtime:
 
 ## Demo
 
-<!-- TODO: paste the demo video link before submission -->
-**Demo video:** _add link before submission_
+**Demo video:** <https://drive.google.com/uc?id=1BcjWKVS7cUhcCcd_QPogpIrx54LoQ3vT&export=download>
 
 A quick walkthrough of uploading evidence, generating the wiki, and producing a
 formatted one-page resume (scenarios A–D in [`test/README.md`](test/README.md)).
