@@ -113,6 +113,24 @@ test/                 mock fixtures for end-to-end testing
 > Contents of `raw/`, `wiki/`, `ai-resume/original/`, and `ai-resume/exports/`
 > are gitignored — they hold personal/generated data and stay on your machine.
 
+## Evaluation
+
+The project's correctness-critical claims are validated mechanically, and its
+limits are documented honestly. Highlights:
+
+- **9 passing unit tests** (`npm test`) covering format fidelity (a style profile
+  survives a build → extract round trip), the *template → original → default*
+  precedence, and `.docx` resume parsing.
+- **Grounding is enforced in code**, not just prompted: missing facts become
+  `Needs clarification` and the AI path falls back to deterministic heuristics if it
+  returns incomplete output — so the app is fully demonstrable with no AI installed.
+- **A documented end-to-end scenario matrix** (`test/`) with distinct fixtures that
+  make the resolved format obvious, plus a built-in **diff view** that lets users
+  audit exactly what changed between resume versions.
+
+Full methodology, results, comparisons, and known failure modes are in
+**[docs/EVALUATION.md](docs/EVALUATION.md)**.
+
 ## AI usage disclosure
 
 This project was built with substantial AI assistance, and the application
@@ -151,3 +169,30 @@ itself uses AI at runtime:
 - `jszip` library — <https://github.com/Stuk/jszip>
 - LibreOffice — <https://www.libreoffice.org/>
 - Andrej Karpathy — <https://karpathy.ai/>
+
+## Demo
+
+<!-- TODO: paste the demo video link before submission -->
+**Demo video:** _add link before submission_
+
+A quick walkthrough of uploading evidence, generating the wiki, and producing a
+formatted one-page resume (scenarios A–D in [`test/README.md`](test/README.md)).
+
+## Project submission (course rubric)
+
+Where each rubric category is addressed, for graders:
+
+| Rubric category | Where it's addressed |
+| --- | --- |
+| **Problem & Insight** | [Project overview](#project-overview) — the evidence-grounded "wiki-first" approach to resume generation, inspired by the LLM Wiki pattern. |
+| **Execution & Technical Work** | [Key capabilities](#project-overview), [Tech stack](#tech-stack), [Usage](#usage) — a working local app with two workflows, format preservation, grounding, one-page curation, diffing, and live previews. |
+| **Evaluation & Evidence** | [Evaluation](#evaluation) summary + **[docs/EVALUATION.md](docs/EVALUATION.md)** — 9 passing tests, format-fidelity round-trip, grounding guarantees, E2E scenario matrix, and a limitations/failure analysis. |
+| **Communication & Presentation** | This README, the [demo video](#demo), and supporting docs ([docs/project-description.md](docs/project-description.md), [test/README.md](test/README.md)). |
+| **Process, Integrity & Disclosure** | [AI usage disclosure](#ai-usage-disclosure), [Citations and acknowledgements](#citations-and-acknowledgements), and the public commit history below. |
+
+**Development process & effort over time.** The project was built incrementally
+over ~3 weeks (initial scaffold on 2026-05-17 through submission on 2026-06-04)
+across a public commit history with visible iteration — UI redesign, the one-page
+constraint fix, format preservation, the diff view, and test fixtures each landed as
+separate, reviewable commits (several via pull request). Run `git log --oneline` to
+see the full progression.
