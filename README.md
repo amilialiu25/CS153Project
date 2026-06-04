@@ -66,3 +66,8 @@ To create a packaged app later:
 ```bash
 npm run package:mac
 ```
+
+To clean up:
+```bash
+npm run clean
+```
