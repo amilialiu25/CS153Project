@@ -6,3 +6,16 @@ npm-debug.log*
 .resume-copilot-state.json
 dev.stdout.log
 dev.stderr.log
+
+# User-uploaded sources, generated wiki, and resume exports are personal/runtime
+# data — keep only the folder README placeholders under version control.
+/raw/*
+!/raw/README.md
+/wiki/*
+!/wiki/README.md
+/ai-resume/original/*
+/ai-resume/exports/*
+!/ai-resume/exports/README.md
+
+# Local editor / harness configuration
+.claude/

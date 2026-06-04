@@ -7,6 +7,35 @@ const { detectClaude, generateWikiPages: agentGenerateWikiPages, generateResumeV
 
 const PORT = 3000;
 const rendererDir = path.join(__dirname, "renderer");
+const resumeValuesPath = path.join(core.exportDir, "resume-values.json");
+const resumeValuesPrevPath = path.join(core.exportDir, "resume-values-prev.json");
+
+async function readResumeValues(filePath) {
+  try { return JSON.parse(await fsPromises.readFile(filePath, "utf8")); }
+  catch { return null; }
+}
+
+async function saveResumeValues(values) {
+  const current = await readResumeValues(resumeValuesPath);
+  if (current) await fsPromises.writeFile(resumeValuesPrevPath, JSON.stringify(current, null, 2));
+  await fsPromises.writeFile(resumeValuesPath, JSON.stringify(values, null, 2));
+}
+
+// The baseline the resume preview diffs against:
+//  - "improve existing resume" mode -> the original uploaded resume, so the diff
+//    shows what changed versus the resume the user started from
+//  - otherwise -> the previous generation (resume-values-prev.json)
+async function computeDiffBaseline(workflowMode) {
+  if (workflowMode === core.workflowModes.improveExistingResume) {
+    const originalPath = await core.getPrimaryOriginalResumeDocxPath();
+    if (originalPath) {
+      const parsed = await core.parseResumeDocx(originalPath);
+      const baseline = core.resumeValuesFromParsedResume(parsed);
+      if (baseline) return baseline;
+    }
+  }
+  return readResumeValues(resumeValuesPrevPath);
+}
 
 const MIME_TYPES = {
   ".html": "text/html",
@@ -48,15 +77,17 @@ async function handleApi(req, res) {
   try {
     if (route === "/api/state" && method === "GET") {
       await core.ensureProjectDirs();
-      const [projectState, rawFiles, originalResumeFiles, templateFiles, exportFiles, wikiPages, agentStatus] = await Promise.all([
+      const [projectState, rawFiles, originalResumeFiles, templateFiles, exportFiles, wikiPages, agentStatus, resumeValues] = await Promise.all([
         core.readProjectState(),
         core.listRawFiles(),
         core.listOriginalResumeFiles(),
         core.listResumeTemplateFiles(),
         core.listExportFiles(),
         core.readMarkdownFiles(core.wikiDir),
-        detectClaude()
+        detectClaude(),
+        readResumeValues(resumeValuesPath)
       ]);
+      const prevResumeValues = await computeDiffBaseline(projectState.workflowMode);
 
       return sendJson(res, {
         workflowMode: projectState.workflowMode,
@@ -70,7 +101,9 @@ async function handleApi(req, res) {
         originalResumeFiles,
         templateFiles,
         exportFiles,
-        wikiPages
+        wikiPages,
+        resumeValues,
+        prevResumeValues
       });
     }
 
@@ -86,6 +119,13 @@ async function handleApi(req, res) {
         : core.workflowModes.buildFromScratch;
       const state = await core.mergeProjectState({ workflowMode: nextMode });
       return sendJson(res, { workflowMode: state.workflowMode });
+    }
+
+    if (route === "/api/file-preview" && method === "GET") {
+      await core.ensureProjectDirs();
+      const fileGroup = url.searchParams.get("group");
+      const fileName = url.searchParams.get("name");
+      return sendJson(res, await core.readManagedFileText(fileGroup, fileName));
     }
 
     if (route === "/api/delete-file" && method === "POST") {
@@ -165,38 +205,40 @@ async function handleApi(req, res) {
       const wikiPages = await core.readMarkdownFiles(core.wikiDir);
       const outputFormat = options.outputFormat === "pdf" ? "pdf" : "docx";
 
-      const agentResult = await agentGenerateResumeValues(wikiPages);
-      let docxPath;
-      let usedAgent = agentResult.usedAgent;
+      const projectState = await core.readProjectState();
+      const styleProfile = await core.resolveResumeStyleProfile(projectState.workflowMode);
 
-      if (agentResult.usedAgent) {
-        const outputPath = path.join(core.exportDir, "resume-draft.docx");
-        try {
-          await fsPromises.access(core.defaultDocxTemplatePath);
-          await core.fillDocxTemplate(core.defaultDocxTemplatePath, outputPath, agentResult.values);
-          docxPath = outputPath;
-        } catch {
-          docxPath = await core.writeResumeDocx(wikiPages);
-          usedAgent = false;
-        }
+      const agentResult = await agentGenerateResumeValues(wikiPages);
+      let usedAgent = agentResult.usedAgent;
+      let resumeValues;
+
+      if (agentResult.usedAgent && Array.isArray(agentResult.values.experience)) {
+        resumeValues = core.trimResumeValues(agentResult.values);
       } else {
-        docxPath = await core.writeResumeDocx(wikiPages);
+        resumeValues = core.trimResumeValues(core.buildFullResumeValues(wikiPages));
+        usedAgent = false;
       }
 
+      const docxPath = await core.writeResumeDocx(wikiPages, resumeValues, styleProfile);
+
+      await saveResumeValues(resumeValues);
+      const prevResumeValues = await computeDiffBaseline(projectState.workflowMode);
+
       let exportError = null;
-      if (outputFormat === "pdf") {
-        try {
-          await core.convertDocxToPdf(docxPath);
-        } catch (error) {
-          exportError = `DOCX was created, but PDF export failed: ${error.message}`;
-        }
+      try {
+        await core.convertDocxToPdf(docxPath);
+      } catch (error) {
+        exportError = `DOCX was created, but PDF export failed: ${error.message}`;
       }
 
       await core.mergeProjectState({ lastResumeGeneratedAt: core.getIsoNow() });
       return sendJson(res, {
         exportFiles: await core.listExportFiles(),
         exportError,
-        usedAgent
+        usedAgent,
+        formatSource: styleProfile.source,
+        resumeValues,
+        prevResumeValues
       });
     }
 
@@ -235,6 +277,15 @@ function serveStatic(req, res) {
 const server = http.createServer((req, res) => {
   if (req.url.startsWith("/api/")) {
     handleApi(req, res);
+  } else if (req.url.startsWith("/exports/")) {
+    const safeName = path.basename(req.url);
+    const fullPath = path.join(core.exportDir, safeName);
+    if (!fullPath.startsWith(core.exportDir)) { res.writeHead(403); res.end(); return; }
+    const ext = path.extname(safeName);
+    const ct = ext === ".pdf" ? "application/pdf" : ext === ".docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/octet-stream";
+    const stream = fs.createReadStream(fullPath);
+    stream.on("open", () => { res.writeHead(200, { "Content-Type": ct }); stream.pipe(res); });
+    stream.on("error", () => { res.writeHead(404); res.end("Not found"); });
   } else {
     serveStatic(req, res);
   }
